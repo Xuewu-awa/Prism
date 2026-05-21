@@ -5,6 +5,7 @@ const state = {
     library: { templates: [] },
     selectedNodeId: null,
     selectedTemplateKey: null,
+    simplifiedGraph: true,
     pendingPin: null,
     drag: null
 };
@@ -27,6 +28,7 @@ const els = {
     addString: document.getElementById("addStringButton"),
     addBool: document.getElementById("addBoolButton"),
     autoLayout: document.getElementById("autoLayoutButton"),
+    toggleSimplified: document.getElementById("toggleSimplifiedButton"),
     deleteNode: document.getElementById("deleteNodeButton"),
     apply: document.getElementById("applyGraphButton"),
     save: document.getElementById("saveAssetButton"),
@@ -58,6 +60,7 @@ els.addInt.addEventListener("click", () => addNode("EX_IntConst", "整数", { va
 els.addString.addEventListener("click", () => addNode("EX_StringConst", "字符串", { value: "" }));
 els.addBool.addEventListener("click", () => addNode("EX_True", "True", { value: true }));
 els.autoLayout.addEventListener("click", autoLayoutNodes);
+els.toggleSimplified.addEventListener("click", toggleSimplifiedGraph);
 els.deleteNode.addEventListener("click", deleteSelectedNode);
 els.apply.addEventListener("click", applyGraph);
 els.save.addEventListener("click", saveAsset);
@@ -164,15 +167,22 @@ function renderGraph() {
     els.wireLayer.replaceChildren();
 
     if (!state.graph) return;
-    fitCanvasToNodes();
-    for (const node of state.graph.nodes) {
-        renderNode(node);
+    const visibleNodes = getRenderableNodes();
+    const visibleIds = new Set(visibleNodes.map(node => node.id));
+    if (!visibleNodes.some(node => node.id === state.selectedNodeId)) {
+        state.selectedNodeId = null;
     }
-    drawWires();
+
+    fitCanvasToNodes(visibleNodes);
+    for (const node of visibleNodes) {
+        renderNode(node, visibleIds);
+    }
+    drawWires(visibleIds);
     renderInspector();
+    updateSimplifiedButton(visibleNodes.length);
 }
 
-function renderNode(node) {
+function renderNode(node, visibleIds) {
     const element = document.createElement("article");
     element.className = `node ${node.kind.toLowerCase()} ${state.selectedNodeId === node.id ? "selected" : ""}`;
     element.dataset.nodeId = node.id;
@@ -211,6 +221,15 @@ function renderNode(node) {
     }
 
     body.append(inputs, outputs);
+
+    const foldedNodes = getFoldedNodesFor(node, visibleIds);
+    if (state.simplifiedGraph && foldedNodes.length) {
+        const summary = document.createElement("div");
+        summary.className = "folded-summary";
+        summary.textContent = buildFoldedSummary(foldedNodes);
+        body.append(summary);
+    }
+
     element.append(body);
     element.addEventListener("click", () => selectNode(node.id));
     els.nodeLayer.append(element);
@@ -281,12 +300,13 @@ function connectPins(fromNode, fromPin, toNode, toPin) {
     }
 }
 
-function drawWires() {
+function drawWires(visibleIds = new Set(getRenderableNodes().map(node => node.id))) {
     els.wireLayer.replaceChildren();
     if (!state.graph) return;
 
     syncConnectionsFromPins();
     for (const connection of state.graph.connections ?? []) {
+        if (!visibleIds.has(connection.fromNodeId) || !visibleIds.has(connection.toNodeId)) continue;
         const from = getPinCenter(connection.fromNodeId, connection.fromPinId);
         const to = getPinCenter(connection.toNodeId, connection.toPinId);
         if (!from || !to) continue;
@@ -395,7 +415,9 @@ function autoLayoutNodes() {
     if (!state.graph?.nodes?.length) return;
     syncConnectionsFromPins();
 
-    const nodes = state.graph.nodes;
+    const nodes = getRenderableNodes();
+    if (!nodes.length) return;
+
     const nodeMap = new Map(nodes.map(node => [node.id, node]));
     const incoming = new Map(nodes.map(node => [node.id, 0]));
     const outgoing = new Map(nodes.map(node => [node.id, []]));
@@ -459,17 +481,96 @@ function autoLayoutNodes() {
 
     fitCanvasToNodes();
     renderGraph();
-    setStatus("节点已自动整理");
+    setStatus(state.simplifiedGraph ? "可见节点已自动整理" : "节点已自动整理");
 }
 
-function fitCanvasToNodes() {
-    if (!state.graph?.nodes?.length) return;
-    const maxX = Math.max(...state.graph.nodes.map(node => node.position.x)) + 420;
-    const maxY = Math.max(...state.graph.nodes.map(node => node.position.y)) + 260;
+function fitCanvasToNodes(nodes = getRenderableNodes()) {
+    if (!nodes.length) return;
+    const maxX = Math.max(...nodes.map(node => node.position.x)) + 420;
+    const maxY = Math.max(...nodes.map(node => node.position.y)) + 260;
     els.nodeLayer.style.width = `${Math.max(1800, maxX)}px`;
     els.nodeLayer.style.height = `${Math.max(1200, maxY)}px`;
     els.wireLayer.style.width = els.nodeLayer.style.width;
     els.wireLayer.style.height = els.nodeLayer.style.height;
+}
+
+function toggleSimplifiedGraph() {
+    state.simplifiedGraph = !state.simplifiedGraph;
+    renderGraph();
+    const mode = state.simplifiedGraph ? "简化视图" : "完整字节码视图";
+    setStatus(`已切换到${mode}`);
+}
+
+function updateSimplifiedButton(visibleCount) {
+    const totalCount = state.graph?.nodes?.length ?? 0;
+    els.toggleSimplified.textContent = state.simplifiedGraph ? "显示完整" : "简化视图";
+    els.toggleSimplified.classList.toggle("active", state.simplifiedGraph);
+    els.toggleSimplified.title = state.simplifiedGraph
+        ? `当前显示 ${visibleCount}/${totalCount} 个节点，点击显示完整字节码`
+        : "当前显示完整字节码，点击回到简化视图";
+}
+
+function getRenderableNodes() {
+    const nodes = state.graph?.nodes ?? [];
+    if (!state.simplifiedGraph) return nodes;
+
+    const visible = nodes.filter(shouldShowInSimplifiedView);
+    return visible.length ? visible : nodes.filter(isTopLevelNode);
+}
+
+function shouldShowInSimplifiedView(node) {
+    if (node.id?.startsWith("new-")) return true;
+    if (isNestedNode(node)) return false;
+    if (node.kind === "ContextFunctionCall" || node.kind === "FunctionCall" || node.kind === "Context") return true;
+    if (node.functionName) return true;
+    if (node.payload?.resolvedOwnerIndex === -99) return true;
+    if (isControlFlowNode(node)) return true;
+    return !isNoiseExpression(node);
+}
+
+function isNestedNode(node) {
+    return /^expr-\d+-/.test(node.id ?? "");
+}
+
+function isTopLevelNode(node) {
+    return node.id?.startsWith("new-") || /^expr-\d+$/.test(node.id ?? "");
+}
+
+function isControlFlowNode(node) {
+    return ["EX_Return", "EX_Jump", "EX_JumpIfNot", "EX_Let", "EX_Skip", "EX_SwitchValue"].includes(node.expressionType);
+}
+
+function isNoiseExpression(node) {
+    return [
+        "EX_IntConst",
+        "EX_FloatConst",
+        "EX_DoubleConst",
+        "EX_StringConst",
+        "EX_NameConst",
+        "EX_TextConst",
+        "EX_True",
+        "EX_False",
+        "EX_Self",
+        "EX_Nothing",
+        "EX_EndFunctionParms",
+        "EX_ObjectConst",
+        "EX_NoObject"
+    ].includes(node.expressionType);
+}
+
+function getFoldedNodesFor(node, visibleIds = new Set(getRenderableNodes().map(item => item.id))) {
+    if (!state.simplifiedGraph || !state.graph?.nodes?.length) return [];
+    const prefix = `${node.id}-`;
+    return state.graph.nodes.filter(item => item.id?.startsWith(prefix) && !visibleIds.has(item.id));
+}
+
+function buildFoldedSummary(nodes) {
+    const important = nodes
+        .filter(node => node.functionName || !isNoiseExpression(node))
+        .slice(0, 3)
+        .map(node => node.functionName || node.title || node.expressionType);
+    const details = important.length ? `：${important.join("、")}` : "";
+    return `已折叠 ${nodes.length} 个内部表达式${details}`;
 }
 
 function renderLibrary() {

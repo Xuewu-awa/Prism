@@ -61,6 +61,12 @@ button:hover {
     transform: translateY(-1px);
 }
 
+button.active {
+    border-color: var(--accent-2);
+    color: #fff6cf;
+    box-shadow: inset 0 0 0 1px rgba(233, 196, 106, 0.28);
+}
+
 button.primary {
     background: linear-gradient(180deg, #258463, #176049);
     border-color: #49ad84;
@@ -289,6 +295,18 @@ textarea {
 
 .pin.output {
     justify-content: flex-end;
+}
+
+.folded-summary {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding: 7px 8px;
+    border: 1px dashed rgba(233, 196, 106, 0.45);
+    border-radius: 6px;
+    background: rgba(233, 196, 106, 0.08);
+    color: #f3dc9a;
+    font-size: 11px;
+    line-height: 1.35;
 }
 
 .pin-dot {
