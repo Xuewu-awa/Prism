@@ -9,7 +9,7 @@
 <body>
     <main class="app-shell">
         <aside class="sidebar">
-            <section class="panel">
+            <section class="panel hero-panel">
                 <h1>蓝图修改器</h1>
                 <label class="file-field">
                     <span>UE 版本</span>
@@ -42,7 +42,7 @@
                 <button id="openAssetButton" class="primary">打开资产</button>
             </section>
 
-            <section class="panel">
+            <section class="panel export-panel">
                 <div class="panel-title">
                     <h2>导出列表</h2>
                     <button id="refreshGraphButton" title="刷新节点图">刷</button>
@@ -50,7 +50,7 @@
                 <select id="exportSelect" size="8"></select>
             </section>
 
-            <section class="panel">
+            <section class="panel library-panel">
                 <div class="panel-title">
                     <h2>本地节点库</h2>
                     <button id="reloadLibraryButton" title="重新加载节点库">刷</button>
@@ -66,6 +66,7 @@
                     <button id="addIntButton" title="添加整数节点">+ 整数</button>
                     <button id="addStringButton" title="添加字符串节点">+ 字符串</button>
                     <button id="addBoolButton" title="添加布尔节点">+ 布尔</button>
+                    <button id="autoLayoutButton" title="自动整理节点">自动整理</button>
                     <button id="deleteNodeButton" title="删除选中节点">删除</button>
                 </div>
                 <div class="toolbar-group">
@@ -111,6 +112,26 @@
                         <textarea id="nodePayloadInput" spellcheck="false"></textarea>
                     </label>
                     <button id="updateNodeButton" type="submit" class="primary">更新节点</button>
+                </form>
+            </section>
+
+            <section class="panel template-comment-panel">
+                <h2>节点库注释</h2>
+                <div id="templateEditorEmpty" class="empty-state">选择节点库模板</div>
+                <form id="templateEditorForm" class="inspector-form hidden">
+                    <label>
+                        <span>模板</span>
+                        <input id="templateNameInput" type="text" readonly>
+                    </label>
+                    <label>
+                        <span>节点注释</span>
+                        <textarea id="templateCommentInput" spellcheck="false" placeholder="说明这个节点的用途、限制或使用建议"></textarea>
+                    </label>
+                    <div id="pinCommentList" class="pin-comment-list"></div>
+                    <div class="button-row">
+                        <button id="saveTemplateCommentButton" type="submit" class="primary">保存注释</button>
+                        <button id="addTemplateNodeButton" type="button">加入图中</button>
+                    </div>
                 </form>
             </section>
 

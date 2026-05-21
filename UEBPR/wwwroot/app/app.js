@@ -4,6 +4,7 @@ const state = {
     graph: null,
     library: { templates: [] },
     selectedNodeId: null,
+    selectedTemplateKey: null,
     pendingPin: null,
     drag: null
 };
@@ -25,6 +26,7 @@ const els = {
     addInt: document.getElementById("addIntButton"),
     addString: document.getElementById("addStringButton"),
     addBool: document.getElementById("addBoolButton"),
+    autoLayout: document.getElementById("autoLayoutButton"),
     deleteNode: document.getElementById("deleteNodeButton"),
     apply: document.getElementById("applyGraphButton"),
     save: document.getElementById("saveAssetButton"),
@@ -37,6 +39,13 @@ const els = {
     nodeValue: document.getElementById("nodeValueInput"),
     nodePayload: document.getElementById("nodePayloadInput"),
     updateNode: document.getElementById("updateNodeButton"),
+    templateEditorEmpty: document.getElementById("templateEditorEmpty"),
+    templateEditorForm: document.getElementById("templateEditorForm"),
+    templateName: document.getElementById("templateNameInput"),
+    templateComment: document.getElementById("templateCommentInput"),
+    pinCommentList: document.getElementById("pinCommentList"),
+    saveTemplateComment: document.getElementById("saveTemplateCommentButton"),
+    addTemplateNode: document.getElementById("addTemplateNodeButton"),
     messages: document.getElementById("messages")
 };
 
@@ -48,10 +57,16 @@ els.libraryFilter.addEventListener("input", renderLibrary);
 els.addInt.addEventListener("click", () => addNode("EX_IntConst", "整数", { value: 0 }));
 els.addString.addEventListener("click", () => addNode("EX_StringConst", "字符串", { value: "" }));
 els.addBool.addEventListener("click", () => addNode("EX_True", "True", { value: true }));
+els.autoLayout.addEventListener("click", autoLayoutNodes);
 els.deleteNode.addEventListener("click", deleteSelectedNode);
 els.apply.addEventListener("click", applyGraph);
 els.save.addEventListener("click", saveAsset);
 els.inspectorForm.addEventListener("submit", updateSelectedNode);
+els.templateEditorForm.addEventListener("submit", saveSelectedTemplateComments);
+els.addTemplateNode.addEventListener("click", () => {
+    const template = getSelectedTemplate();
+    if (template) addTemplateNode(template);
+});
 
 window.addEventListener("resize", drawWires);
 
@@ -131,6 +146,7 @@ function collectSelectedFiles() {
 async function loadLibrary() {
     state.library = await getJson("/api/node-library");
     renderLibrary();
+    renderTemplateEditor();
 }
 
 function renderExports() {
@@ -148,6 +164,7 @@ function renderGraph() {
     els.wireLayer.replaceChildren();
 
     if (!state.graph) return;
+    fitCanvasToNodes();
     for (const node of state.graph.nodes) {
         renderNode(node);
     }
@@ -181,7 +198,7 @@ function renderNode(node) {
 
         const dot = document.createElement("span");
         dot.className = "pin-dot";
-        dot.title = `${pin.name}: ${pin.pinType}`;
+        dot.title = `${pin.name}: ${pin.pinType}${pin.comment ? `\n${pin.comment}` : ""}`;
         dot.addEventListener("click", event => {
             event.stopPropagation();
             clickPin(node, pin, dot);
@@ -374,17 +391,152 @@ function deleteSelectedNode() {
     renderGraph();
 }
 
+function autoLayoutNodes() {
+    if (!state.graph?.nodes?.length) return;
+    syncConnectionsFromPins();
+
+    const nodes = state.graph.nodes;
+    const nodeMap = new Map(nodes.map(node => [node.id, node]));
+    const incoming = new Map(nodes.map(node => [node.id, 0]));
+    const outgoing = new Map(nodes.map(node => [node.id, []]));
+
+    for (const connection of state.graph.connections ?? []) {
+        if (!nodeMap.has(connection.fromNodeId) || !nodeMap.has(connection.toNodeId)) continue;
+        outgoing.get(connection.fromNodeId).push(connection.toNodeId);
+        incoming.set(connection.toNodeId, (incoming.get(connection.toNodeId) ?? 0) + 1);
+    }
+
+    const layerByNode = new Map();
+    const queue = nodes
+        .filter(node => (incoming.get(node.id) ?? 0) === 0)
+        .map(node => node.id);
+
+    if (!queue.length) {
+        queue.push(...nodes.map(node => node.id));
+    }
+
+    for (const id of queue) {
+        layerByNode.set(id, 0);
+    }
+
+    while (queue.length) {
+        const id = queue.shift();
+        const currentLayer = layerByNode.get(id) ?? 0;
+        for (const next of outgoing.get(id) ?? []) {
+            const nextLayer = Math.max(layerByNode.get(next) ?? 0, currentLayer + 1);
+            if (nextLayer !== layerByNode.get(next)) {
+                layerByNode.set(next, nextLayer);
+                queue.push(next);
+            }
+        }
+    }
+
+    for (const node of nodes) {
+        if (!layerByNode.has(node.id)) {
+            layerByNode.set(node.id, 0);
+        }
+    }
+
+    const layers = new Map();
+    for (const node of nodes) {
+        const layer = layerByNode.get(node.id) ?? 0;
+        if (!layers.has(layer)) layers.set(layer, []);
+        layers.get(layer).push(node);
+    }
+
+    const columnGap = 320;
+    const rowGap = 170;
+    const startX = 90;
+    const startY = 80;
+    for (const [layer, layerNodes] of [...layers.entries()].sort((a, b) => a[0] - b[0])) {
+        layerNodes
+            .sort((a, b) => (a.title || a.id).localeCompare(b.title || b.id))
+            .forEach((node, row) => {
+                node.position.x = startX + layer * columnGap;
+                node.position.y = startY + row * rowGap;
+            });
+    }
+
+    fitCanvasToNodes();
+    renderGraph();
+    setStatus("节点已自动整理");
+}
+
+function fitCanvasToNodes() {
+    if (!state.graph?.nodes?.length) return;
+    const maxX = Math.max(...state.graph.nodes.map(node => node.position.x)) + 420;
+    const maxY = Math.max(...state.graph.nodes.map(node => node.position.y)) + 260;
+    els.nodeLayer.style.width = `${Math.max(1800, maxX)}px`;
+    els.nodeLayer.style.height = `${Math.max(1200, maxY)}px`;
+    els.wireLayer.style.width = els.nodeLayer.style.width;
+    els.wireLayer.style.height = els.nodeLayer.style.height;
+}
+
 function renderLibrary() {
     const filter = els.libraryFilter.value.trim().toLowerCase();
     els.libraryList.replaceChildren();
     for (const template of state.library.templates ?? []) {
         if (filter && !`${template.ownerKey} ${template.functionName}`.toLowerCase().includes(filter)) continue;
         const item = document.createElement("div");
-        item.className = `library-item ${template.isResolved ? "" : "unresolved"}`;
-        item.innerHTML = `<strong>${escapeHtml(template.functionName || "未命名")}</strong>${escapeHtml(template.ownerKey || "无 Owner")}<br>${escapeHtml(template.parameterSignature || "无参数")}`;
-        item.addEventListener("click", () => addTemplateNode(template));
+        item.className = `library-item ${template.isResolved ? "" : "unresolved"} ${state.selectedTemplateKey === template.key ? "selected" : ""}`;
+        item.innerHTML = `<strong>${escapeHtml(template.functionName || "未命名")}</strong>${escapeHtml(template.ownerKey || "无 Owner")}<br>${escapeHtml(template.comment || template.parameterSignature || "无参数")}`;
+        item.addEventListener("click", () => selectTemplate(template.key));
         els.libraryList.append(item);
     }
+}
+
+function selectTemplate(key) {
+    state.selectedTemplateKey = key;
+    renderLibrary();
+    renderTemplateEditor();
+}
+
+function renderTemplateEditor() {
+    const template = getSelectedTemplate();
+    els.templateEditorEmpty.classList.toggle("hidden", Boolean(template));
+    els.templateEditorForm.classList.toggle("hidden", !template);
+    els.pinCommentList.replaceChildren();
+
+    if (!template) return;
+
+    els.templateName.value = template.key ?? "";
+    els.templateComment.value = template.comment ?? "";
+
+    for (const pin of template.pins ?? []) {
+        const item = document.createElement("label");
+        item.className = "pin-comment-item";
+        const title = document.createElement("span");
+        title.textContent = `${pin.direction} / ${pin.name} / ${pin.pinType}`;
+        const textarea = document.createElement("textarea");
+        textarea.value = pin.comment ?? "";
+        textarea.dataset.pinId = pin.id;
+        textarea.dataset.pinName = pin.name;
+        textarea.dataset.pinDirection = pin.direction;
+        textarea.placeholder = "写下这个参数的用途、默认值建议或注意事项";
+        item.append(title, textarea);
+        els.pinCommentList.append(item);
+    }
+}
+
+async function saveSelectedTemplateComments(event) {
+    event.preventDefault();
+    const template = getSelectedTemplate();
+    if (!template) return;
+
+    template.comment = els.templateComment.value;
+    for (const textarea of els.pinCommentList.querySelectorAll("textarea")) {
+        const pin = (template.pins ?? []).find(item =>
+            item.id === textarea.dataset.pinId
+            || (item.name === textarea.dataset.pinName && item.direction === textarea.dataset.pinDirection));
+        if (pin) {
+            pin.comment = textarea.value;
+        }
+    }
+
+    state.library = await postJson("/api/node-library/template", template);
+    addMessage("已保存注释", template.functionName || template.key);
+    renderLibrary();
+    renderTemplateEditor();
 }
 
 function addTemplateNode(template) {
@@ -400,7 +552,8 @@ function addTemplateNode(template) {
         payload: {
             templateKey: template.key,
             parameterSignature: template.parameterSignature,
-            resolvedOwnerIndex: template.resolvedOwnerIndex
+            resolvedOwnerIndex: template.resolvedOwnerIndex,
+            comment: template.comment ?? ""
         },
         pins: JSON.parse(JSON.stringify(template.pins ?? []))
     };
@@ -411,6 +564,10 @@ function addTemplateNode(template) {
     state.graph.nodes.push(node);
     renderGraph();
     selectNode(node.id);
+}
+
+function getSelectedTemplate() {
+    return (state.library.templates ?? []).find(template => template.key === state.selectedTemplateKey) ?? null;
 }
 
 function syncConnectionsFromPins() {

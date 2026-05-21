@@ -98,6 +98,17 @@ app.MapPost("/api/assets/{sessionId:guid}/save", (Guid sessionId, AssetSessionSe
 
 app.MapGet("/api/node-library", (NodeLibraryService library) => Results.Ok(library.GetLibrary()));
 app.MapPost("/api/node-library/import", (NodeLibraryDto imported, NodeLibraryService library) => Results.Ok(library.Import(imported)));
+app.MapPost("/api/node-library/template", (NodeTemplateDto template, NodeLibraryService library) =>
+{
+    try
+    {
+        return Results.Ok(library.UpdateTemplate(template));
+    }
+    catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
+    {
+        return Results.BadRequest(new ErrorDto(ex.Message));
+    }
+});
 app.MapGet("/api/node-library/export", (NodeLibraryService library) => Results.File(library.ExportBytes(), "application/json", "node-library.json"));
 
 app.Run();

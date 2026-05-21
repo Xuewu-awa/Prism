@@ -52,6 +52,7 @@ public sealed class GraphPinDto
     public string Name { get; set; } = string.Empty;
     public string Direction { get; set; } = "Input";
     public string PinType { get; set; } = "Exec";
+    public string Comment { get; set; } = string.Empty;
     public List<string> LinkedTo { get; set; } = [];
 }
 
@@ -77,6 +78,7 @@ public sealed class NodeTemplateDto
     public string FunctionName { get; set; } = string.Empty;
     public string ParameterSignature { get; set; } = string.Empty;
     public string SourceExpression { get; set; } = string.Empty;
+    public string Comment { get; set; } = string.Empty;
     public bool IsResolved { get; set; }
     public List<GraphPinDto> Pins { get; set; } = [];
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

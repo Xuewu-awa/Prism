@@ -61,6 +61,11 @@ public sealed class NodeLibraryService
         {
             cached ??= Load();
             var existingIndex = cached.Templates.FindIndex(item => string.Equals(item.Key, template.Key, StringComparison.OrdinalIgnoreCase));
+            if (existingIndex >= 0)
+            {
+                PreserveUserComments(cached.Templates[existingIndex], template);
+            }
+
             template.UpdatedAt = DateTimeOffset.UtcNow;
             if (existingIndex >= 0)
             {
@@ -76,6 +81,29 @@ public sealed class NodeLibraryService
                 .ThenBy(static item => item.FunctionName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             Save(cached);
+        }
+    }
+
+    public NodeLibraryDto UpdateTemplate(NodeTemplateDto template)
+    {
+        if (string.IsNullOrWhiteSpace(template.Key))
+        {
+            throw new ArgumentException("节点模板缺少 Key。");
+        }
+
+        lock (gate)
+        {
+            cached ??= Load();
+            var existingIndex = cached.Templates.FindIndex(item => string.Equals(item.Key, template.Key, StringComparison.OrdinalIgnoreCase));
+            if (existingIndex < 0)
+            {
+                throw new KeyNotFoundException("找不到要更新的节点模板。");
+            }
+
+            template.UpdatedAt = DateTimeOffset.UtcNow;
+            cached.Templates[existingIndex] = template;
+            Save(cached);
+            return cached;
         }
     }
 
@@ -115,5 +143,29 @@ public sealed class NodeLibraryService
     {
         using var stream = File.Create(libraryPath);
         JsonSerializer.Serialize(stream, library, JsonOptions);
+    }
+
+    private static void PreserveUserComments(NodeTemplateDto existing, NodeTemplateDto updated)
+    {
+        if (string.IsNullOrWhiteSpace(updated.Comment))
+        {
+            updated.Comment = existing.Comment;
+        }
+
+        foreach (var pin in updated.Pins)
+        {
+            if (!string.IsNullOrWhiteSpace(pin.Comment))
+            {
+                continue;
+            }
+
+            var existingPin = existing.Pins.FirstOrDefault(item =>
+                string.Equals(item.Name, pin.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(item.Direction, pin.Direction, StringComparison.OrdinalIgnoreCase));
+            if (existingPin is not null)
+            {
+                pin.Comment = existingPin.Comment;
+            }
+        }
     }
 }
