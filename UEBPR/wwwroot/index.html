@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Blueprint Ripper</title>
+    <link rel="stylesheet" href="/app/styles.css">
+</head>
+<body>
+    <main class="app-shell">
+        <aside class="sidebar">
+            <section class="panel">
+                <h1>Blueprint Ripper</h1>
+                <label class="file-field">
+                    <span>uasset</span>
+                    <input id="uassetInput" type="file" accept=".uasset">
+                </label>
+                <label class="file-field">
+                    <span>uexp</span>
+                    <input id="uexpInput" type="file" accept=".uexp">
+                </label>
+                <label class="file-field">
+                    <span>usmap</span>
+                    <input id="usmapInput" type="file" accept=".usmap,.jmap,.gz">
+                </label>
+                <button id="openAssetButton" class="primary">Open Asset</button>
+            </section>
+
+            <section class="panel">
+                <div class="panel-title">
+                    <h2>Exports</h2>
+                    <button id="refreshGraphButton" title="Refresh graph">R</button>
+                </div>
+                <select id="exportSelect" size="8"></select>
+            </section>
+
+            <section class="panel">
+                <div class="panel-title">
+                    <h2>Node Library</h2>
+                    <button id="reloadLibraryButton" title="Reload library">R</button>
+                </div>
+                <input id="libraryFilter" type="search" placeholder="Filter owner or function">
+                <div id="libraryList" class="library-list"></div>
+            </section>
+        </aside>
+
+        <section class="workspace">
+            <header class="toolbar">
+                <div class="toolbar-group">
+                    <button id="addIntButton" title="Add integer node">+ Int</button>
+                    <button id="addStringButton" title="Add string node">+ String</button>
+                    <button id="addBoolButton" title="Add bool node">+ Bool</button>
+                    <button id="deleteNodeButton" title="Delete selected node">Delete</button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="applyGraphButton" class="primary" title="Compile graph changes">Apply</button>
+                    <button id="saveAssetButton" title="Save asset with backup">Save</button>
+                </div>
+                <span id="statusText" class="status">No asset loaded</span>
+            </header>
+
+            <div class="canvas-wrap">
+                <svg id="wireLayer" class="wire-layer"></svg>
+                <div id="nodeLayer" class="node-layer"></div>
+            </div>
+        </section>
+
+        <aside class="inspector">
+            <section class="panel">
+                <h2>Inspector</h2>
+                <div id="inspectorEmpty" class="empty-state">Select a node</div>
+                <form id="inspectorForm" class="inspector-form hidden">
+                    <label>
+                        <span>Title</span>
+                        <input id="nodeTitleInput" type="text">
+                    </label>
+                    <label>
+                        <span>Owner</span>
+                        <input id="nodeOwnerInput" type="text">
+                    </label>
+                    <label>
+                        <span>Function</span>
+                        <input id="nodeFunctionInput" type="text">
+                    </label>
+                    <label>
+                        <span>Expression</span>
+                        <input id="nodeExpressionInput" type="text">
+                    </label>
+                    <label>
+                        <span>Value</span>
+                        <input id="nodeValueInput" type="text">
+                    </label>
+                    <label>
+                        <span>Payload</span>
+                        <textarea id="nodePayloadInput" spellcheck="false"></textarea>
+                    </label>
+                    <button id="updateNodeButton" type="submit" class="primary">Update Node</button>
+                </form>
+            </section>
+
+            <section class="panel">
+                <h2>Messages</h2>
+                <div id="messages" class="messages"></div>
+            </section>
+        </aside>
+    </main>
+
+    <script src="/app/app.js"></script>
+</body>
+</html>
