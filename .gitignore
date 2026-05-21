@@ -35,6 +35,10 @@ UEBPR/wwwroot/lib/
 
 # Local experiments and large upstream fixture/documentation folders
 UAssetCLI/
+UAssetAPI-master/.editorconfig
+UAssetAPI-master/.github/
+UAssetAPI-master/.gitignore
+UAssetAPI-master/UAssetAPI.sln
 UAssetAPI-master/UAssetAPI.Tests/
 UAssetAPI-master/UAssetAPI.Benchmark/
 UAssetAPI-master/docs/
