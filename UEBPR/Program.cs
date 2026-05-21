@@ -30,63 +30,70 @@ app.MapPost("/api/assets/open", async (HttpRequest request, AssetSessionService 
 {
     if (!request.HasFormContentType)
     {
-        return Results.BadRequest(new ErrorDto("Expected multipart/form-data."));
+        return Results.BadRequest(new ErrorDto("请求必须是 multipart/form-data。"));
     }
 
     var form = await request.ReadFormAsync(cancellationToken);
     var uasset = form.Files.GetFile("uasset");
     if (uasset is null)
     {
-        return Results.BadRequest(new ErrorDto("Missing uasset file."));
+        return Results.BadRequest(new ErrorDto("缺少 uasset 文件。"));
     }
 
-    var session = await sessions.OpenAsync(
-        uasset,
-        form.Files.GetFile("uexp"),
-        form.Files.GetFile("usmap"),
-        cancellationToken);
+    try
+    {
+        var session = await sessions.OpenAsync(
+            uasset,
+            form.Files.ToList(),
+            form["engineVersion"].FirstOrDefault(),
+            cancellationToken);
 
-    return Results.Ok(graphs.DescribeSession(session));
+        return Results.Ok(graphs.DescribeSession(session));
+    }
+    catch (Exception ex) when (ex is ArgumentException or FormatException or InvalidOperationException)
+    {
+        return Results.BadRequest(new ErrorDto($"资产无法打开：{ex.Message}"));
+    }
 });
 
 app.MapPost("/api/assets/{sessionId:guid}/usmap", async (Guid sessionId, HttpRequest request, AssetSessionService sessions, CancellationToken cancellationToken) =>
 {
     if (!request.HasFormContentType)
     {
-        return Results.BadRequest(new ErrorDto("Expected multipart/form-data."));
+        return Results.BadRequest(new ErrorDto("请求必须是 multipart/form-data。"));
     }
 
     var form = await request.ReadFormAsync(cancellationToken);
     var usmap = form.Files.GetFile("usmap");
     if (usmap is null)
     {
-        return Results.BadRequest(new ErrorDto("Missing usmap file."));
+        return Results.BadRequest(new ErrorDto("缺少 usmap 文件。"));
     }
 
     return sessions.TryGet(sessionId, out var session)
         ? Results.Ok(await sessions.AttachUsmapAsync(session, usmap, cancellationToken))
-        : Results.NotFound(new ErrorDto("Asset session was not found."));
+        : Results.NotFound(new ErrorDto("找不到资产会话。"));
 });
 
 app.MapGet("/api/assets/{sessionId:guid}/graphs/{exportIndex:int}", (Guid sessionId, int exportIndex, AssetSessionService sessions, BlueprintGraphService graphs) =>
 {
     return sessions.TryGet(sessionId, out var session)
         ? Results.Ok(graphs.BuildGraph(session, exportIndex))
-        : Results.NotFound(new ErrorDto("Asset session was not found."));
+        : Results.NotFound(new ErrorDto("找不到资产会话。"));
 });
 
 app.MapPut("/api/assets/{sessionId:guid}/graphs/{exportIndex:int}", (Guid sessionId, int exportIndex, GraphDocumentDto graph, AssetSessionService sessions, AssetWritebackService writeback) =>
 {
     return sessions.TryGet(sessionId, out var session)
         ? Results.Ok(writeback.ApplyGraph(session, exportIndex, graph))
-        : Results.NotFound(new ErrorDto("Asset session was not found."));
+        : Results.NotFound(new ErrorDto("找不到资产会话。"));
 });
 
 app.MapPost("/api/assets/{sessionId:guid}/save", (Guid sessionId, AssetSessionService sessions, AssetWritebackService writeback) =>
 {
     return sessions.TryGet(sessionId, out var session)
         ? Results.Ok(writeback.Save(session))
-        : Results.NotFound(new ErrorDto("Asset session was not found."));
+        : Results.NotFound(new ErrorDto("找不到资产会话。"));
 });
 
 app.MapGet("/api/node-library", (NodeLibraryService library) => Results.Ok(library.GetLibrary()));

@@ -9,8 +9,9 @@ const state = {
 };
 
 const els = {
-    uasset: document.getElementById("uassetInput"),
-    uexp: document.getElementById("uexpInput"),
+    engineVersion: document.getElementById("engineVersionSelect"),
+    assetFiles: document.getElementById("assetFilesInput"),
+    assetDirectory: document.getElementById("assetDirectoryInput"),
     usmap: document.getElementById("usmapInput"),
     open: document.getElementById("openAssetButton"),
     exportSelect: document.getElementById("exportSelect"),
@@ -44,8 +45,8 @@ els.exportSelect.addEventListener("change", loadSelectedGraph);
 els.refreshGraph.addEventListener("click", loadSelectedGraph);
 els.reloadLibrary.addEventListener("click", loadLibrary);
 els.libraryFilter.addEventListener("input", renderLibrary);
-els.addInt.addEventListener("click", () => addNode("EX_IntConst", "Int", { value: 0 }));
-els.addString.addEventListener("click", () => addNode("EX_StringConst", "String", { value: "" }));
+els.addInt.addEventListener("click", () => addNode("EX_IntConst", "整数", { value: 0 }));
+els.addString.addEventListener("click", () => addNode("EX_StringConst", "字符串", { value: "" }));
 els.addBool.addEventListener("click", () => addNode("EX_True", "True", { value: true }));
 els.deleteNode.addEventListener("click", deleteSelectedNode);
 els.apply.addEventListener("click", applyGraph);
@@ -57,23 +58,29 @@ window.addEventListener("resize", drawWires);
 loadLibrary();
 
 async function openAsset() {
-    if (!els.uasset.files[0]) {
-        addMessage("Missing file", "Choose a .uasset file first.");
+    const selectedFiles = collectSelectedFiles();
+    const uasset = selectedFiles.find(file => file.name.toLowerCase().endsWith(".uasset"));
+    if (!uasset) {
+        addMessage("缺少文件", "请先选择一个 .uasset 文件。");
         return;
     }
 
     const form = new FormData();
-    form.append("uasset", els.uasset.files[0]);
-    if (els.uexp.files[0]) form.append("uexp", els.uexp.files[0]);
-    if (els.usmap.files[0]) form.append("usmap", els.usmap.files[0]);
+    form.append("engineVersion", els.engineVersion.value);
+    form.append("uasset", uasset, uasset.name);
+    for (const file of selectedFiles) {
+        if (file === uasset) continue;
+        form.append("files", file, file.webkitRelativePath || file.name);
+    }
+    if (els.usmap.files[0]) form.append("usmap", els.usmap.files[0], els.usmap.files[0].name);
 
-    setStatus("Opening asset...");
+    setStatus("正在打开资产...");
     const result = await postForm("/api/assets/open", form);
     state.session = result.sessionId;
     state.exports = result.exports ?? [];
     renderExports();
     addMessages(result.warnings ?? []);
-    setStatus(`${result.assetName} opened`);
+    setStatus(`${result.assetName} 已打开`);
 
     const firstScript = state.exports.find(item => item.hasScriptBytecode);
     if (firstScript) {
@@ -84,34 +91,41 @@ async function openAsset() {
 
 async function loadSelectedGraph() {
     if (!state.session || !els.exportSelect.value) return;
-    setStatus("Loading graph...");
+    setStatus("正在加载节点图...");
     state.graph = await getJson(`/api/assets/${state.session}/graphs/${els.exportSelect.value}`);
     state.selectedNodeId = null;
     renderGraph();
     addMessages(state.graph.warnings ?? []);
-    setStatus(`${state.graph.exportName} loaded`);
+    setStatus(`${state.graph.exportName} 已加载`);
 }
 
 async function applyGraph() {
     if (!state.session || !state.graph) return;
     syncConnectionsFromPins();
-    setStatus("Applying graph...");
+    setStatus("正在应用节点修改...");
     const result = await putJson(`/api/assets/${state.session}/graphs/${state.graph.exportIndex}`, state.graph);
     addMessages(result.warnings ?? []);
     if (result.unresolvedNodeIds?.length) {
-        addMessage("Unresolved nodes", result.unresolvedNodeIds.join(", "));
+        addMessage("未解析节点", result.unresolvedNodeIds.join(", "));
     }
-    setStatus(`Compiled ${result.compiledExpressionCount} expressions`);
+    setStatus(`已编译 ${result.compiledExpressionCount} 个表达式`);
     await loadLibrary();
 }
 
 async function saveAsset() {
     if (!state.session) return;
-    setStatus("Saving asset...");
+    setStatus("正在保存资产...");
     const result = await postJson(`/api/assets/${state.session}/save`, {});
     addMessages(result.warnings ?? []);
-    addMessage("Saved", `${result.outputPath} (backup: ${result.backupPath})`);
-    setStatus("Asset saved");
+    addMessage("已保存", `${result.outputPath}（备份：${result.backupPath}）`);
+    setStatus("资产已保存");
+}
+
+function collectSelectedFiles() {
+    const files = [];
+    for (const file of els.assetFiles.files ?? []) files.push(file);
+    for (const file of els.assetDirectory.files ?? []) files.push(file);
+    return files;
 }
 
 async function loadLibrary() {
@@ -150,7 +164,7 @@ function renderNode(node) {
 
     const header = document.createElement("div");
     header.className = "node-header";
-    header.textContent = node.title || node.expressionType || "Node";
+    header.textContent = node.title || node.expressionType || "节点";
     header.addEventListener("pointerdown", event => startDrag(event, node));
     element.append(header);
 
@@ -317,7 +331,7 @@ function updateSelectedNode(event) {
             node.payload.value = coerceValue(els.nodeValue.value);
         }
     } catch (error) {
-        addMessage("Invalid payload", error.message);
+        addMessage("Payload 无效", error.message);
         return;
     }
 
@@ -367,7 +381,7 @@ function renderLibrary() {
         if (filter && !`${template.ownerKey} ${template.functionName}`.toLowerCase().includes(filter)) continue;
         const item = document.createElement("div");
         item.className = `library-item ${template.isResolved ? "" : "unresolved"}`;
-        item.innerHTML = `<strong>${escapeHtml(template.functionName || "Unnamed")}</strong>${escapeHtml(template.ownerKey || "No owner")}<br>${escapeHtml(template.parameterSignature || "No params")}`;
+        item.innerHTML = `<strong>${escapeHtml(template.functionName || "未命名")}</strong>${escapeHtml(template.ownerKey || "无 Owner")}<br>${escapeHtml(template.parameterSignature || "无参数")}`;
         item.addEventListener("click", () => addTemplateNode(template));
         els.libraryList.append(item);
     }
@@ -434,7 +448,7 @@ function clearActivePins() {
 }
 
 function addMessages(messages) {
-    for (const message of messages) addMessage("Notice", message);
+    for (const message of messages) addMessage("提示", translateMessage(message));
 }
 
 function addMessage(title, detail) {
@@ -442,6 +456,13 @@ function addMessage(title, detail) {
     message.className = "message";
     message.innerHTML = `<strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}`;
     els.messages.prepend(message);
+}
+
+function translateMessage(message) {
+    return String(message)
+        .replace("No usmap was supplied. Unversioned properties and some pin types may be incomplete.", "未提供 usmap。未版本化属性和部分 Pin 类型可能不完整。")
+        .replace("No matching .uexp file was supplied. If this asset uses split exports, choose the uasset and uexp together or use directory upload.", "未找到匹配的 .uexp。如果该资产使用分离导出，请同时选择 uasset 与 uexp，或使用目录选择。")
+        .replace("Offsets were recalculated for context/skip expressions. Explicit jump target editing is preserved from payload until label-based jumps are added.", "已重新计算 context/skip 表达式的 offset。显式 jump 目标暂时保留 payload 中的值。");
 }
 
 function setStatus(text) {
