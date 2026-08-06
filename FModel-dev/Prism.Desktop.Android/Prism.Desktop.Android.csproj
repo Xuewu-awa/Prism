@@ -8,7 +8,12 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
-    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <!-- 与 Android 版 Prism 一致：Release 禁用裁剪/AOT，避免兼容问题 -->
+    <TrimMode Condition="'$(Configuration)' == 'Release'">none</TrimMode>
+    <PublishTrimmed Condition="'$(Configuration)' == 'Release'">false</PublishTrimmed>
+    <RunAOTCompilation Condition="'$(Configuration)' == 'Release'">false</RunAOTCompilation>
+    <AndroidEnableProguard Condition="'$(Configuration)' == 'Release'">false</AndroidEnableProguard>
   </PropertyGroup>
 
   <ItemGroup>
