@@ -426,6 +426,7 @@ public partial class MainViewModel : ViewModelBase
             }
 
             StatusText = $"已打开 {Path.GetFileName(PakPath)}：{result.FileCount:N0} 个文件。";
+            AddLog($"打开 Pak：{Path.GetFileName(PakPath)}（{result.FileCount:N0} 个文件）");
             CurrentTabIndex = 1;
             await NavigateToAsync(string.Empty);
         });
@@ -489,6 +490,7 @@ public partial class MainViewModel : ViewModelBase
             Entries = new ObservableCollection<EntryItem>(results.Select(EntryItem.Create));
             CurrentPathText = $"搜索：{SearchQuery.Trim()}";
             StatusText = $"搜索命中 {results.Count:N0} 项。";
+            AddLog($"搜索“{SearchQuery.Trim()}”命中 {results.Count:N0} 项");
             ClearPreview();
             StartThumbnails();
         });
@@ -746,13 +748,6 @@ public partial class MainViewModel : ViewModelBase
             Directory.CreateDirectory(inputDir);
 
             string baseName = Path.GetFileNameWithoutExtension(item.FullPath);
-            string? uassetPakPath = rawFiles.Keys.FirstOrDefault(k => k.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase));
-            if (uassetPakPath is null)
-            {
-                throw new InvalidOperationException("该资源不是 .uasset 资产。");
-            }
-
-            string inputUassetPath = Path.Combine(inputDir, baseName + ".uasset");
             Dictionary<string, string> originalFiles = new(StringComparer.OrdinalIgnoreCase);
             foreach ((string pakPath, byte[] data) in rawFiles)
             {
@@ -797,7 +792,16 @@ public partial class MainViewModel : ViewModelBase
             }
             else
             {
-                // 纹理：检查格式
+                // 纹理：需要 .uasset 关联文件
+                string? uassetPakPath = rawFiles.Keys.FirstOrDefault(k => k.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase));
+                if (uassetPakPath is null)
+                {
+                    throw new InvalidOperationException("该资源不是 .uasset 资产。");
+                }
+
+                string inputUassetPath = Path.Combine(inputDir, baseName + ".uasset");
+
+                // 检查纹理格式
                 TextureInspectionResult inspect = await new TextureReplacementService().InspectAsync(
                     inputUassetPath,
                     EngineVersion.VER_UE5_6,
@@ -1054,6 +1058,7 @@ public partial class MainViewModel : ViewModelBase
                     Compression: PakCompression.Oodle)));
 
                 StatusText = $"补丁 Pak 已构建：{Path.GetFileName(outputPath)}（{files.Count} 个文件）";
+            AddLog($"构建补丁 Pak：{Path.GetFileName(outputPath)}（{files.Count} 个文件）");
             }
         });
     }
@@ -1213,6 +1218,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial string TempDirectory { get; set; }
 
+    [ObservableProperty]
+    public partial string LogText { get; set; } = "暂无日志";
+
     // ============ 列表缩略图（默认关闭，设置中开启） ============
 
     [ObservableProperty]
@@ -1316,6 +1324,56 @@ public partial class MainViewModel : ViewModelBase
         AstcencStatus = runner?.HasAstcenc == true ? "已找到 astcenc" : "未找到 astcenc";
         TexconvStatus = runner?.HasTexconv == true ? "已找到 texconv" : "未找到 texconv";
         TempDirectory = Path.GetTempPath();
+        RefreshLog();
+        Services.AppLog.Add($"应用启动 v{VersionText}");
+    }
+
+    /// <summary>刷新日志预览文本（设置页展示）。</summary>
+    private void RefreshLog() => LogText = Services.AppLog.FullText;
+
+    /// <summary>记录一条日志并刷新预览。</summary>
+    private void AddLog(string line)
+    {
+        Services.AppLog.Add(line);
+        RefreshLog();
+    }
+
+    /// <summary>导出日志：桌面写文件，Android 走 SAF 保存流。</summary>
+    [RelayCommand]
+    private async Task ExportLogAsync()
+    {
+        TopLevel? top = TopLevel;
+        if (top is null)
+        {
+            return;
+        }
+
+        IStorageFile? file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出日志",
+            SuggestedFileName = $"prism-log-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+            FileTypeChoices = [new FilePickerFileType("文本") { Patterns = ["*.txt"] }],
+        });
+        if (file is null)
+        {
+            return;
+        }
+
+        RefreshLog();
+        byte[] content = System.Text.Encoding.UTF8.GetBytes(LogText);
+        if (OperatingSystem.IsAndroid())
+        {
+            await using Stream dst = await file.OpenWriteAsync();
+            await dst.WriteAsync(content);
+            AddLog($"日志已导出：{file.Name}");
+        }
+        else if (file.TryGetLocalPath() is { } path)
+        {
+            await File.WriteAllBytesAsync(path, content);
+            AddLog($"日志已导出：{path}");
+        }
+
+        StatusText = $"日志已导出（{Services.AppLog.Count:N0} 行）。";
     }
 
     private IStorageFile? _mergeOutputTarget;
@@ -1460,6 +1518,7 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusText = $"错误：{ex.Message}";
+            AddLog($"错误：{ex.Message}");
         }
         finally
         {

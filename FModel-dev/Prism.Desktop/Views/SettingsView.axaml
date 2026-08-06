@@ -125,6 +125,30 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+
+            <!-- 日志 -->
+            <Border Classes="card" Padding="22">
+                <StackPanel Spacing="10">
+                    <DockPanel>
+                        <TextBlock Text="日志" FontSize="12" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Right"
+                                Content="导出日志"
+                                Command="{Binding ExportLogCommand}"
+                                Classes="ghost" />
+                    </DockPanel>
+                    <Border Background="{DynamicResource SurfaceBrush}"
+                            CornerRadius="8"
+                            Padding="10"
+                            MaxHeight="260">
+                        <ScrollViewer>
+                            <TextBlock Text="{Binding LogText}"
+                                       FontFamily="Consolas, Courier New"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+                        </ScrollViewer>
+                    </Border>
+                </StackPanel>
+            </Border>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
