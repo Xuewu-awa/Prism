@@ -15,11 +15,26 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        var vm = new MainViewModel();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = vm,
+            };
+        }
+        else if (ApplicationLifetime is IActivityApplicationLifetime activity)
+        {
+            activity.MainViewFactory = () => new MainView
+            {
+                DataContext = vm,
+            };
+        }
+        else if (ApplicationLifetime is ISingleViewApplicationLifetime singleView)
+        {
+            singleView.MainView = new MainView
+            {
+                DataContext = vm,
             };
         }
 

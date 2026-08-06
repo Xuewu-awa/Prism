@@ -1,15 +1,31 @@
+using Avalonia.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
 using PakTool.Core;
 
 namespace Prism.Desktop.Models;
 
-/// <summary>扁平文件列表项（对应 Web 版的 Name/Type/Size 三列）。</summary>
-public sealed record EntryItem(
-    string FullPath,
-    string Name,
-    bool IsDirectory,
-    string Kind,
-    string SizeText)
+/// <summary>扁平文件列表项（对应 Web 版的 Name/Type/Size 三列，可选缩略图）。</summary>
+public sealed partial class EntryItem : ObservableObject
 {
+    public EntryItem(string fullPath, string name, bool isDirectory, string kind, string sizeText)
+    {
+        FullPath = fullPath;
+        Name = name;
+        IsDirectory = isDirectory;
+        Kind = kind;
+        SizeText = sizeText;
+    }
+
+    public string FullPath { get; }
+
+    public string Name { get; }
+
+    public bool IsDirectory { get; }
+
+    public string Kind { get; }
+
+    public string SizeText { get; }
+
     /// <summary>类型图标前缀（DIR/IMG/AUD/VID/3D/MAT/BP/LOC/UE/FILE）。</summary>
     public string KindIcon => IsDirectory ? "DIR" : Kind switch
     {
@@ -26,6 +42,17 @@ public sealed record EntryItem(
 
     /// <summary>次要行：目录显示路径，文件显示大小。</summary>
     public string MetaText => IsDirectory ? FullPath : SizeText;
+
+    /// <summary>懒加载的缩略图（设置中开启后生成）。</summary>
+    [ObservableProperty]
+    public partial Bitmap? Thumbnail { get; set; }
+
+    public bool HasThumbnail => Thumbnail is not null;
+
+    partial void OnThumbnailChanged(Bitmap? value) => OnPropertyChanged(nameof(HasThumbnail));
+
+    /// <summary>是否为可生成缩略图的图片类资源。</summary>
+    public bool IsImageKind => !IsDirectory && (Kind == "Texture" || Kind is "PNG" or "JPG" or "JPEG" or "BMP" or "TGA" or "WEBP" or "DDS");
 
     public static EntryItem Create(ArchiveEntryDto entry) => new(
         entry.FullPath,

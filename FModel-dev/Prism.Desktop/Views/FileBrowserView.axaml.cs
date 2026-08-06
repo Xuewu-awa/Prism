@@ -11,9 +11,12 @@ public partial class FileBrowserView : UserControl
         InitializeComponent();
     }
 
-    private void OnListDoubleTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// 单击激活（与 Web 版一致，兼容手机触摸）：目录进入，文件预览。
+    /// </summary>
+    private void OnListTapped(object? sender, TappedEventArgs e)
     {
-        if (DataContext is MainViewModel vm)
+        if (DataContext is MainViewModel vm && vm.SelectedItem is not null)
         {
             vm.ActivateCommand.Execute(null);
         }

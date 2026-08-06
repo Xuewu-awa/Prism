@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Prism.Desktop.Views;
 
-public partial class SettingsWindow : Window
+public partial class SettingsView : UserControl
 {
-    public SettingsWindow()
+    public SettingsView()
     {
         InitializeComponent();
     }

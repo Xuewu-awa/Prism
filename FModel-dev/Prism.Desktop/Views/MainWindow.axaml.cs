@@ -13,7 +13,16 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
             {
                 vm.TopLevel = this;
-                vm.WindowWidth = Width;
+                // 应用持久化的窗口大小（随后 SizeChanged 会同步 WindowWidth）
+                if (vm.WindowWidth > 0)
+                {
+                    Width = vm.WindowWidth;
+                }
+
+                if (vm.WindowHeight > 0)
+                {
+                    Height = vm.WindowHeight;
+                }
             }
         };
         SizeChanged += (_, e) =>
@@ -21,6 +30,15 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
             {
                 vm.WindowWidth = e.NewSize.Width;
+            }
+        };
+        Closing += (_, _) =>
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.WindowWidth = Width;
+                vm.WindowHeight = Height;
+                vm.SaveWindowState();
             }
         };
     }

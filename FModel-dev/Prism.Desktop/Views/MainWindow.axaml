@@ -1,18 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:vm="using:Prism.Desktop.ViewModels"
         xmlns:views="using:Prism.Desktop.Views"
         x:Class="Prism.Desktop.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="Prism"
         Width="1280"
         Height="820"
         Background="{DynamicResource SurfaceBrush}">
 
-    <Panel>
-        <views:HomeView IsVisible="{Binding IsHomeVisible}" />
-        <views:WorkspaceView DataContext="{Binding}" IsVisible="{Binding IsWorkspaceVisible}" />
-        <views:MergeView IsVisible="{Binding IsMergeVisible}" />
-    </Panel>
+    <views:MainView />
 </Window>

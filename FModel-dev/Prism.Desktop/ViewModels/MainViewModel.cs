@@ -20,6 +20,24 @@ public partial class MainViewModel : ViewModelBase
     private readonly SemaphoreSlim _gate = new(1, 1);
     private UAssetCliRunner? _cliRunner;
     private int _cliRunnerTried;
+    private readonly AppSettings _settings;
+    private bool _loaded;
+
+    public MainViewModel()
+    {
+        _settings = AppSettingsStore.Load();
+        ShowThumbnails = _settings.ShowThumbnails;
+        UseOodleCompression = _settings.UseOodleCompression;
+        AskBeforeReplace = _settings.AskBeforeReplace;
+        ExportDirectory = _settings.ExportDirectory;
+        PakPath = _settings.PakPath;
+        UsmapPath = _settings.UsmapPath;
+        MergePakPath = _settings.MergePakPath;
+        MergeOutputPath = _settings.MergeOutputPath;
+        AesKey = _settings.AesKey;
+        InitializeSettings();
+        _loaded = true;
+    }
 
     /// <summary>窗口引用，用于文件选择对话框；由 MainWindow 在 Opened 时注入。</summary>
     public TopLevel? TopLevel { get; set; }
@@ -41,7 +59,6 @@ public partial class MainViewModel : ViewModelBase
     partial void OnWindowWidthChanged(double value)
     {
         bool landscape = value >= 980;
-        Console.WriteLine($"[layout] width={value:F0} -> landscape={landscape}");
         if (landscape != IsLandscape)
         {
             IsLandscape = landscape;
@@ -54,7 +71,7 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void TogglePreviewExpanded() => IsPreviewExpanded = !IsPreviewExpanded;
 
-    // ============ 视图导航（主页 / 工作区 / 合并页） ============
+    // ============ 视图导航（主页 / 工作区 / 合并页 / 设置） ============
 
     [ObservableProperty]
     public partial string CurrentView { get; set; } = "Home";
@@ -65,11 +82,14 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsMergeVisible => CurrentView == "Merge";
 
+    public bool IsSettingsVisible => CurrentView == "Settings";
+
     partial void OnCurrentViewChanged(string value)
     {
         OnPropertyChanged(nameof(IsHomeVisible));
         OnPropertyChanged(nameof(IsWorkspaceVisible));
         OnPropertyChanged(nameof(IsMergeVisible));
+        OnPropertyChanged(nameof(IsSettingsVisible));
     }
 
     [RelayCommand]
@@ -80,6 +100,9 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoMerge() => CurrentView = "Merge";
+
+    [RelayCommand]
+    private void GoSettings() => CurrentView = "Settings";
 
     // ============ 工作区标签（配置 / 浏览 / 替换） ============
 
@@ -270,6 +293,61 @@ public partial class MainViewModel : ViewModelBase
         PickReplacementCommand.NotifyCanExecuteChanged();
     }
 
+    // ============ 持久化 ============
+
+    /// <summary>窗口高度（关闭时保存）。</summary>
+    public double WindowHeight { get; set; } = 820;
+
+    partial void OnUseOodleCompressionChanged(bool value) => SaveSettings();
+
+    partial void OnAskBeforeReplaceChanged(bool value) => SaveSettings();
+
+    partial void OnExportDirectoryChanged(string value) => SaveSettings();
+
+    partial void OnPakPathChanged(string value) => SaveSettings();
+
+    partial void OnUsmapPathChanged(string value) => SaveSettings();
+
+    partial void OnMergePakPathChanged(string value)
+    {
+        MergePakCommand.NotifyCanExecuteChanged();
+        SaveSettings();
+    }
+
+    partial void OnMergeOutputPathChanged(string value)
+    {
+        MergePakCommand.NotifyCanExecuteChanged();
+        SaveSettings();
+    }
+
+    partial void OnAesKeyChanged(string value) => SaveSettings();
+
+    public void SaveWindowState()
+    {
+        _settings.WindowWidth = WindowWidth;
+        _settings.WindowHeight = WindowHeight;
+        SaveSettings();
+    }
+
+    private void SaveSettings()
+    {
+        if (!_loaded)
+        {
+            return;
+        }
+
+        _settings.ShowThumbnails = ShowThumbnails;
+        _settings.UseOodleCompression = UseOodleCompression;
+        _settings.AskBeforeReplace = AskBeforeReplace;
+        _settings.ExportDirectory = ExportDirectory;
+        _settings.PakPath = PakPath;
+        _settings.UsmapPath = UsmapPath;
+        _settings.MergePakPath = MergePakPath;
+        _settings.MergeOutputPath = MergeOutputPath;
+        _settings.AesKey = AesKey;
+        AppSettingsStore.Save(_settings);
+    }
+
     public bool CanPickReplacement => SelectedPatchItem is not null && !IsBusy;
 
     public bool CanRemovePatchItem => SelectedPatchItem is not null;
@@ -289,10 +367,6 @@ public partial class MainViewModel : ViewModelBase
     public partial string MergeStatus { get; set; } = "就绪";
 
     public bool CanMergePak => IsPakOpen && MergePakPath.Length > 0 && MergeOutputPath.Length > 0;
-
-    partial void OnMergePakPathChanged(string value) => MergePakCommand.NotifyCanExecuteChanged();
-
-    partial void OnMergeOutputPathChanged(string value) => MergePakCommand.NotifyCanExecuteChanged();
 
     // ============ 打开 ============
 
@@ -388,6 +462,7 @@ public partial class MainViewModel : ViewModelBase
             CurrentPathText = $"搜索：{SearchQuery.Trim()}";
             StatusText = $"搜索命中 {results.Count:N0} 项。";
             ClearPreview();
+            StartThumbnails();
         });
     }
 
@@ -398,6 +473,7 @@ public partial class MainViewModel : ViewModelBase
         CurrentFolder = folder;
         CurrentPathText = "/" + folder;
         ClearPreview();
+        StartThumbnails();
     }
 
     /// <summary>供列表按目录加载。</summary>
@@ -952,21 +1028,126 @@ public partial class MainViewModel : ViewModelBase
         }
     }
 
-    // ============ 设置 ============
+    // ============ 设置（应用内视图，兼容手机） ============
 
-    [RelayCommand]
-    private void OpenSettings()
+    [ObservableProperty]
+    public partial string VersionText { get; set; }
+
+    [ObservableProperty]
+    public partial string CliStatus { get; set; }
+
+    [ObservableProperty]
+    public partial string AstcencStatus { get; set; }
+
+    [ObservableProperty]
+    public partial string TexconvStatus { get; set; }
+
+    [ObservableProperty]
+    public partial string TempDirectory { get; set; }
+
+    // ============ 列表缩略图（默认关闭，设置中开启） ============
+
+    [ObservableProperty]
+    public partial bool ShowThumbnails { get; set; }
+
+    private CancellationTokenSource? _thumbCts;
+    private readonly SemaphoreSlim _thumbGate = new(4, 4); // 并发解码上限
+
+    partial void OnShowThumbnailsChanged(bool value)
     {
-        if (TopLevel is not Window owner)
+        if (value)
+        {
+            StartThumbnails();
+        }
+        else
+        {
+            ClearThumbnails();
+        }
+
+        SaveSettings();
+    }
+
+    /// <summary>为当前列表中的图片类条目生成缩略图（后台解码，UI 线程建图）。</summary>
+    private void StartThumbnails()
+    {
+        if (!ShowThumbnails || !IsPakOpen)
         {
             return;
         }
 
-        var window = new Views.SettingsWindow
+        _thumbCts?.Cancel();
+        _thumbCts?.Dispose();
+        _thumbCts = new CancellationTokenSource();
+        CancellationToken ct = _thumbCts.Token;
+        List<EntryItem> candidates = Entries.Where(e => e.IsImageKind).ToList();
+        if (candidates.Count == 0)
         {
-            DataContext = new SettingsViewModel(),
-        };
-        window.ShowDialog(owner);
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            foreach (EntryItem item in candidates)
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                await _thumbGate.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    AssetPreviewDto? preview = null;
+                    await _gate.WaitAsync(ct).ConfigureAwait(false);
+                    try
+                    {
+                        preview = await _session.ReadPreviewAsync(item.FullPath, ct).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // 非纹理或解码失败：跳过
+                    }
+                    finally
+                    {
+                        _gate.Release();
+                    }
+
+                    if (preview?.Data is { Length: > 0 } data && !ct.IsCancellationRequested)
+                    {
+                        await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            if (!ct.IsCancellationRequested)
+                            {
+                                item.Thumbnail = DecodeImage(data, 64);
+                            }
+                        });
+                    }
+                }
+                finally
+                {
+                    _thumbGate.Release();
+                }
+            }
+        });
+    }
+
+    private void ClearThumbnails()
+    {
+        _thumbCts?.Cancel();
+        foreach (EntryItem item in Entries)
+        {
+            item.Thumbnail = null;
+        }
+    }
+
+    private void InitializeSettings()
+    {
+        VersionText = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "未知";
+        Services.UAssetCliRunner? runner = Services.UAssetCliRunner.TryCreate();
+        CliStatus = runner is not null ? "已找到 UAssetCLI" : "未找到 UAssetCLI（替换功能不可用）";
+        AstcencStatus = runner?.HasAstcenc == true ? "已找到 astcenc" : "未找到 astcenc";
+        TexconvStatus = runner?.HasTexconv == true ? "已找到 texconv" : "未找到 texconv";
+        TempDirectory = Path.GetTempPath();
     }
 
     // ============ 文件选择 ============

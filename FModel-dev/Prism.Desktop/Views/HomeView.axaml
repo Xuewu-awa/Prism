@@ -21,7 +21,8 @@
 
         <Grid ColumnDefinitions="*,*"
               ColumnSpacing="24"
-              Width="520">
+              MaxWidth="520"
+              HorizontalAlignment="Center">
             <Button Command="{Binding GoWorkspaceCommand}"
                     Classes="card"
                     Padding="28,32"
@@ -74,7 +75,7 @@
 
         <!-- 设置入口 -->
         <Button Content="⚙ 设置"
-                Command="{Binding OpenSettingsCommand}"
+                Command="{Binding GoSettingsCommand}"
                 Classes="ghost"
                 HorizontalAlignment="Center" />
     </StackPanel>

@@ -53,23 +53,32 @@
             <ListBox Grid.Row="1"
                      ItemsSource="{Binding Entries}"
                      SelectedItem="{Binding SelectedItem}"
-                     DoubleTapped="OnListDoubleTapped"
+                     Tapped="OnListTapped"
                      Background="Transparent">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="models:EntryItem">
-                        <Grid ColumnDefinitions="34,*,90,70">
-                            <Border Width="28"
-                                    Height="22"
-                                    CornerRadius="6"
-                                    Background="{DynamicResource PrimaryWashBrush}"
-                                    VerticalAlignment="Center">
-                                <TextBlock Text="{Binding KindIcon}"
-                                           FontSize="8"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PrimaryBrush}"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center" />
-                            </Border>
+                        <Grid ColumnDefinitions="38,*,90,70">
+                            <Panel>
+                                <Image Source="{Binding Thumbnail}"
+                                       Width="34"
+                                       Height="34"
+                                       Stretch="Uniform"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding HasThumbnail}" />
+                                <Border Width="28"
+                                        Height="22"
+                                        CornerRadius="6"
+                                        Background="{DynamicResource PrimaryWashBrush}"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding HasThumbnail, Converter={x:Static BoolConverters.Not}}">
+                                    <TextBlock Text="{Binding KindIcon}"
+                                               FontSize="8"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PrimaryBrush}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                            </Panel>
                             <StackPanel Grid.Column="1" Spacing="1">
                                 <TextBlock Text="{Binding Name}"
                                            FontSize="13"
