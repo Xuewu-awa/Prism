@@ -398,3 +398,7 @@ UAssetAPI-master/.github/
 UAssetAPI-master/docs/
 UAssetAPI-master/UAssetAPI.Benchmark/
 UAssetAPI-master/UAssetAPI.Tests/
+
+# Oodle EULA: binary not redistributable
+third_party/lib/arm64-v8a/liboodle-data-shared.so
+
