@@ -364,7 +364,8 @@ public partial class MainViewModel : ViewModelBase
         _settings.PakPath = PakPath;
         _settings.UsmapPath = UsmapPath;
         _settings.MergePakPath = MergePakPath;
-        _settings.MergeOutputPath = MergeOutputPath;
+        // Android 上输出目标是 SAF 会话句柄，不持久化（重启后需重新选择）
+        _settings.MergeOutputPath = OperatingSystem.IsAndroid() ? string.Empty : MergeOutputPath;
         _settings.AesKey = AesKey;
         AppSettingsStore.Save(_settings);
     }
@@ -927,7 +928,7 @@ public partial class MainViewModel : ViewModelBase
         }
 
         string? outputPath = output.TryGetLocalPath();
-        if (string.IsNullOrEmpty(outputPath))
+        if (string.IsNullOrEmpty(outputPath) && !OperatingSystem.IsAndroid())
         {
             return;
         }
@@ -952,13 +953,39 @@ public partial class MainViewModel : ViewModelBase
                 }
             }
 
-            await Task.Run(() => ModifiedPakPackService.Pack(new ModifiedPakRequest(
-                files.Values.OrderBy(f => f.PakPath, StringComparer.OrdinalIgnoreCase).ToArray(),
-                outputPath,
-                UseCompression: UseOodleCompression,
-                Compression: PakCompression.Oodle)));
+            if (OperatingSystem.IsAndroid())
+            {
+                // Android SAF：先打包到临时文件，再流式写入用户选择的位置
+                string tempPakPath = Path.Combine(Path.GetTempPath(), $"patch_{Guid.NewGuid():N}.pak");
+                await Task.Run(() => ModifiedPakPackService.Pack(new ModifiedPakRequest(
+                    files.Values.OrderBy(f => f.PakPath, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    tempPakPath,
+                    UseCompression: UseOodleCompression,
+                    Compression: PakCompression.Oodle)));
 
-            StatusText = $"补丁 Pak 已构建：{Path.GetFileName(outputPath)}（{files.Count} 个文件）";
+                await using Stream src = File.OpenRead(tempPakPath);
+                await using Stream dst = await output.OpenWriteAsync();
+                await src.CopyToAsync(dst);
+                try
+                {
+                    File.Delete(tempPakPath);
+                }
+                catch
+                {
+                }
+
+                StatusText = $"补丁 Pak 已保存：{output.Name}（{files.Count} 个文件）";
+            }
+            else
+            {
+                await Task.Run(() => ModifiedPakPackService.Pack(new ModifiedPakRequest(
+                    files.Values.OrderBy(f => f.PakPath, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    outputPath!,
+                    UseCompression: UseOodleCompression,
+                    Compression: PakCompression.Oodle)));
+
+                StatusText = $"补丁 Pak 已构建：{Path.GetFileName(outputPath)}（{files.Count} 个文件）";
+            }
         });
     }
 
@@ -999,8 +1026,27 @@ public partial class MainViewModel : ViewModelBase
         await RunBusyAsync(async () =>
         {
             MergeBuildResponse result = await BuildMergeCoreAsync();
-            MergeStatus = $"合并完成：{result.FileCount:N0} 个文件，冲突 {result.ConflictCount:N0}，替换 {result.ReplacedCount:N0}";
-            StatusText = $"合并完成：{Path.GetFileName(result.OutputPakPath)}";
+            if (OperatingSystem.IsAndroid() && _mergeOutputTarget is not null)
+            {
+                await using Stream src = File.OpenRead(result.OutputPakPath);
+                await using Stream dst = await _mergeOutputTarget.OpenWriteAsync();
+                await src.CopyToAsync(dst);
+                try
+                {
+                    File.Delete(result.OutputPakPath);
+                }
+                catch
+                {
+                }
+
+                MergeStatus = $"合并完成：{_mergeOutputTarget.Name}，{result.FileCount:N0} 个文件，冲突 {result.ConflictCount:N0}";
+                StatusText = $"合并完成：{_mergeOutputTarget.Name}";
+            }
+            else
+            {
+                MergeStatus = $"合并完成：{result.FileCount:N0} 个文件，冲突 {result.ConflictCount:N0}，替换 {result.ReplacedCount:N0}";
+                StatusText = $"合并完成：{Path.GetFileName(result.OutputPakPath)}";
+            }
         });
     }
 
@@ -1059,13 +1105,17 @@ public partial class MainViewModel : ViewModelBase
                 mapped[file.PakPath] = new ModifiedPakFile(file.DiskPath, file.PakPath);
             }
 
+            string packTarget = OperatingSystem.IsAndroid()
+                ? Path.Combine(Path.GetTempPath(), $"merged_{Guid.NewGuid():N}.pak")
+                : MergeOutputPath;
+
             await Task.Run(() => ModifiedPakPackService.Pack(new ModifiedPakRequest(
                 mapped.Values.OrderBy(x => x.PakPath, StringComparer.OrdinalIgnoreCase).ToArray(),
-                MergeOutputPath,
+                packTarget,
                 UseCompression: UseOodleCompression,
                 Compression: PakCompression.Oodle)));
 
-            return new MergeBuildResponse(MergeOutputPath, mapped.Count, conflicts, replaced);
+            return new MergeBuildResponse(packTarget, mapped.Count, conflicts, replaced);
         }
         finally
         {
@@ -1195,6 +1245,8 @@ public partial class MainViewModel : ViewModelBase
         TempDirectory = Path.GetTempPath();
     }
 
+    private IStorageFile? _mergeOutputTarget;
+
     // ============ 文件选择 ============
 
     [RelayCommand]
@@ -1230,11 +1282,27 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private async Task BrowseMergeOutputAsync()
     {
-        string? path = await PickSaveFileAsync("选择输出 Pak 路径", "merged.pak", ["*.pak"]);
-        if (path is not null)
+        TopLevel? top = TopLevel;
+        if (top is null)
         {
-            MergeOutputPath = path;
+            return;
         }
+
+        IStorageFile? file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "选择输出 Pak 路径",
+            SuggestedFileName = "merged.pak",
+            FileTypeChoices = [new FilePickerFileType("Pak 文件") { Patterns = ["*.pak"] }],
+        });
+        if (file is null)
+        {
+            return;
+        }
+
+        _mergeOutputTarget = file;
+        MergeOutputPath = OperatingSystem.IsAndroid()
+            ? file.Name
+            : file.TryGetLocalPath() ?? file.Name;
     }
 
     [RelayCommand]
@@ -1271,24 +1339,25 @@ public partial class MainViewModel : ViewModelBase
             AllowMultiple = false,
             FileTypeFilter = [new FilePickerFileType("文件") { Patterns = patterns }],
         });
-        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
-    }
-
-    private async Task<string?> PickSaveFileAsync(string title, string suggestedName, string[] patterns)
-    {
-        TopLevel? top = TopLevel;
-        if (top is null)
+        if (files.Count == 0)
         {
             return null;
         }
 
-        IStorageFile? file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        IStorageFile file = files[0];
+        if (OperatingSystem.IsAndroid())
         {
-            Title = title,
-            SuggestedFileName = suggestedName,
-            FileTypeChoices = [new FilePickerFileType("Pak 文件") { Patterns = patterns }],
-        });
-        return file?.TryGetLocalPath();
+            // SAF 返回 content:// URI，无本地路径：复制到应用私有目录
+            string destDir = Path.Combine(PrivateDataDir(), "picked");
+            Directory.CreateDirectory(destDir);
+            string destPath = Path.Combine(destDir, SanitizeFileName(file.Name));
+            await using Stream src = await file.OpenReadAsync();
+            await using FileStream dst = File.Create(destPath);
+            await src.CopyToAsync(dst);
+            return destPath;
+        }
+
+        return file.TryGetLocalPath();
     }
 
     // ============ 工具 ============
@@ -1335,6 +1404,10 @@ public partial class MainViewModel : ViewModelBase
     }
 
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>应用私有数据目录（Android = FilesDir/Prism，桌面 = %LOCALAPPDATA%/Prism）。</summary>
+    private static string PrivateDataDir() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Prism");
 
     private static string SanitizeFileName(string fileName)
     {
