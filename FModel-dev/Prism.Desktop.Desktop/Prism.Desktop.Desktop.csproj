@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Prism.Desktop\Assets\prism.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
