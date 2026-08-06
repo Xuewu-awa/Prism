@@ -68,9 +68,6 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial bool IsPreviewExpanded { get; set; } = true;
 
-    [RelayCommand]
-    private void TogglePreviewExpanded() => IsPreviewExpanded = !IsPreviewExpanded;
-
     // ============ 视图导航（主页 / 工作区 / 合并页 / 设置） ============
 
     [ObservableProperty]
@@ -794,24 +791,13 @@ public partial class MainViewModel : ViewModelBase
     private async Task PickReplacementAsync()
     {
         PatchItem? patch = SelectedPatchItem;
-        TopLevel? top = TopLevel;
-        if (patch is null || top is null)
+        if (patch is null || TopLevel is null)
         {
             return;
         }
 
-        IReadOnlyList<IStorageFile> files = await top.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "选择替换图片",
-            AllowMultiple = false,
-            FileTypeFilter = [new FilePickerFileType("图片") { Patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.webp"] }],
-        });
-        if (files.Count == 0)
-        {
-            return;
-        }
-
-        string? imagePath = files[0].TryGetLocalPath();
+        // 复用 PickFileAsync：Android 上会把 SAF 文件复制到私有目录
+        string? imagePath = await PickFileAsync("选择替换图片", ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tga", "*.webp"]);
         if (string.IsNullOrEmpty(imagePath))
         {
             return;

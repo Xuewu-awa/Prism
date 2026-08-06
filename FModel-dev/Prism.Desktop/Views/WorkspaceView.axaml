@@ -147,7 +147,7 @@
                             <StackPanel>
                                 <!-- 把手（拖拽热区） -->
                                 <Border x:Name="DrawerHandle"
-                                        Height="16"
+                                        Height="22"
                                         Background="Transparent"
                                         Cursor="SizeNorthSouth"
                                         PointerPressed="OnDrawerHandlePressed"
@@ -160,27 +160,17 @@
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center" />
                                 </Border>
-                                <Button Command="{Binding TogglePreviewExpandedCommand}"
-                                        Background="Transparent"
-                                        Padding="0"
-                                        HorizontalContentAlignment="Stretch">
-                                    <DockPanel Margin="14,10">
-                                        <TextBlock Text="{Binding PreviewTitle}"
-                                                   FontSize="13"
-                                                   FontWeight="SemiBold"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   Text="▼"
-                                                   FontSize="11"
-                                                   Opacity="0.5"
-                                                   IsVisible="{Binding IsPreviewExpanded}" />
-                                        <TextBlock DockPanel.Dock="Right"
-                                                   Text="▲"
-                                                   FontSize="11"
-                                                   Opacity="0.5"
-                                                   IsVisible="{Binding IsPreviewExpanded, Converter={x:Static BoolConverters.Not}}" />
-                                    </DockPanel>
-                                </Button>
+                                <!-- 标题栏（仅展示，点击不再收起） -->
+                                <DockPanel Margin="14,4,14,10">
+                                    <TextBlock Text="{Binding PreviewTitle}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock DockPanel.Dock="Right"
+                                               Text="拖拽上方把手调整高度"
+                                               FontSize="10"
+                                               Opacity="0.4" />
+                                </DockPanel>
                                 <!-- 内容区：高度由外层 Border.MaxHeight 控制，不再单独封顶 -->
                                 <ScrollViewer IsVisible="{Binding IsPreviewExpanded}">
                                     <views:PreviewPaneView />
