@@ -65,7 +65,8 @@
                     <TextBox Text="{Binding SearchQuery}"
                              Width="170"
                              PlaceholderText="搜索..."
-                             FontSize="12" />
+                             FontSize="12"
+                             KeyDown="OnSearchKeyDown" />
                     <Button Content="搜索"
                             Command="{Binding SearchCommand}"
                             Classes="ghost" />

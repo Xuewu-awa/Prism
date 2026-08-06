@@ -18,6 +18,16 @@ public partial class WorkspaceView : UserControl
     /// <summary>拖拽上限：参考 Web 版 parentHeight - 8。</summary>
     private double MaxDrawerHeight => Math.Max(200, PortraitLayout.Bounds.Height - 8);
 
+    /// <summary>搜索框回车触发搜索（按钮可能被遮挡时的兜底）。</summary>
+    private void OnSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && DataContext is MainViewModel vm)
+        {
+            vm.SearchCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     public WorkspaceView()
     {
         InitializeComponent();
