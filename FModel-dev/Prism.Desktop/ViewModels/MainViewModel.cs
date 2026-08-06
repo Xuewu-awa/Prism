@@ -797,25 +797,49 @@ public partial class MainViewModel : ViewModelBase
 
         await RunBusyAsync(async () =>
         {
-            UAssetCliRunner runner = GetCliRunner();
             string outputDir = Path.Combine(patch.WorkDirectory, "output");
             Directory.CreateDirectory(outputDir);
             string outputUassetPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(patch.InputUassetPath) + ".patched.uasset");
 
-            UAssetCliRunner.CliResult result = await runner.ReplaceTextureAsync(
-                patch.InputUassetPath,
-                imagePath,
-                outputUassetPath,
-                patch.Format,
-                "VER_UE5_6",
-                "fast");
-
-            if (result.ExitCode != 0)
+            if (OperatingSystem.IsAndroid())
             {
-                patch.Status = "失败";
-                patch.Error = result.CombinedOutput;
-                StatusText = $"替换失败：{result.CombinedOutput.Split('\n').FirstOrDefault()}";
-                return;
+                // Android：进程内替换（libprism_codecs.so 已随 APK 打包）
+                try
+                {
+                    await new TextureReplacementService().ReplaceAsync(
+                        patch.InputUassetPath,
+                        imagePath,
+                        outputUassetPath,
+                        EngineVersion.VER_UE5_6,
+                        NullIfWhiteSpace(UsmapPath),
+                        new TextureCodecOptions(AstcQuality: "fast"));
+                }
+                catch (Exception ex)
+                {
+                    patch.Status = "失败";
+                    patch.Error = ex.Message;
+                    StatusText = $"替换失败：{ex.Message}";
+                    return;
+                }
+            }
+            else
+            {
+                UAssetCliRunner runner = GetCliRunner();
+                UAssetCliRunner.CliResult result = await runner.ReplaceTextureAsync(
+                    patch.InputUassetPath,
+                    imagePath,
+                    outputUassetPath,
+                    patch.Format,
+                    "VER_UE5_6",
+                    "fast");
+
+                if (result.ExitCode != 0)
+                {
+                    patch.Status = "失败";
+                    patch.Error = result.CombinedOutput;
+                    StatusText = $"替换失败：{result.CombinedOutput.Split('\n').FirstOrDefault()}";
+                    return;
+                }
             }
 
             // 映射回 Pak 路径
