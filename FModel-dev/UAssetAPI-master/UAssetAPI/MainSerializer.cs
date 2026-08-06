@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using UAssetAPI.ExportTypes;
@@ -96,18 +97,7 @@ namespace UAssetAPI
             if (_propertyTypeRegistry != null) return;
             _propertyTypeRegistry = new Dictionary<string, RegistryEntry>();
 
-            Assembly[] allDependentAssemblies;
-            try
-            {
-                allDependentAssemblies = GetDependentAssemblies(registryParentDataType.Assembly).ToArray();
-            }
-            catch (PlatformNotSupportedException)
-            {
-                // Native AOT does not support Assembly.GetReferencedAssemblies().
-                // UAssetAPI's own property types live in this assembly, which is enough for the CLI.
-                allDependentAssemblies = Array.Empty<Assembly>();
-            }
-
+            Assembly[] allDependentAssemblies = GetDependentAssemblies(registryParentDataType.Assembly).ToArray();
             Assembly[] allAssemblies = new Assembly[allDependentAssemblies.Length + 1];
             allAssemblies[0] = registryParentDataType.Assembly;
             Array.Copy(allDependentAssemblies, 0, allAssemblies, 1, allDependentAssemblies.Length);
@@ -135,9 +125,11 @@ namespace UAssetAPI
                         res.PropertyType = currentPropertyDataType;
                         res.HasCustomStructSerialization = (bool)returnedHasCustomStructSerialization;
 
-                        ConstructorInfo constructor = currentPropertyDataType.GetConstructor(new[] { typeof(FName), });
-                        if (constructor == null) continue;
-                        res.Creator = name => (PropertyData)constructor.Invoke(new object[] { name });
+                        var nameParam = Expression.Parameter(typeof(FName));
+                        res.Creator = Expression.Lambda<Func<FName, PropertyData>>(
+                           Expression.New(currentPropertyDataType.GetConstructor(new[] { typeof(FName), }), new[] { nameParam, }),
+                           nameParam
+                        ).Compile();
 
                         // prevent duplicate entries
                         if (_propertyTypeRegistry.ContainsKey(returnedPropType.Value))
