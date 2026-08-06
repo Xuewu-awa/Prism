@@ -286,7 +286,42 @@
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
                                                    TextWrapping="Wrap" />
-                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+
+                                        <!-- locres 编辑器 -->
+                                        <StackPanel IsVisible="{Binding SelectedPatchItem.IsLocres}">
+                                            <TextBox Text="{Binding SelectedPatchItem.LocresFilterText}"
+                                                     PlaceholderText="搜索本地化条目..."
+                                                     FontSize="12" />
+                                            <TextBlock Text="修改文本后按回车或失焦自动写回，然后构建补丁 Pak。"
+                                                       FontSize="10"
+                                                       Opacity="0.5" />
+                                            <ItemsControl ItemsSource="{Binding SelectedPatchItem.FilteredLocresEntries}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:LocresEntryVM">
+                                                        <Grid ColumnDefinitions="180,*"
+                                                              ColumnSpacing="8"
+                                                              Margin="0,2">
+                                                            <TextBlock Text="{Binding DisplayKey}"
+                                                                       FontSize="11"
+                                                                       TextWrapping="Wrap"
+                                                                       VerticalAlignment="Center" />
+                                                            <TextBox Grid.Column="1"
+                                                                     Text="{Binding Text}"
+                                                                     TextWrapping="Wrap"
+                                                                     MinHeight="44"
+                                                                     FontSize="12"
+                                                                     KeyDown="OnLocresTextKeyDown"
+                                                                     LostFocus="OnLocresTextLostFocus" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- 纹理对比卡片 -->
+                                        <Grid ColumnDefinitions="*,*"
+                                              ColumnSpacing="12"
+                                              IsVisible="{Binding SelectedPatchItem.IsTexture}">
                                             <Border Classes="card" Padding="12">
                                                 <StackPanel Spacing="8">
                                                     <TextBlock Text="原始" FontSize="10" Opacity="0.6" />
@@ -400,7 +435,41 @@
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
                                                    TextWrapping="Wrap" />
-                                        <Border Classes="card" Padding="12">
+
+                                        <!-- locres 编辑器 -->
+                                        <StackPanel IsVisible="{Binding SelectedPatchItem.IsLocres}">
+                                            <TextBox Text="{Binding SelectedPatchItem.LocresFilterText}"
+                                                     PlaceholderText="搜索本地化条目..."
+                                                     FontSize="12" />
+                                            <TextBlock Text="修改文本后按回车或失焦自动写回，然后构建补丁 Pak。"
+                                                       FontSize="10"
+                                                       Opacity="0.5" />
+                                            <ItemsControl ItemsSource="{Binding SelectedPatchItem.FilteredLocresEntries}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:LocresEntryVM">
+                                                        <Grid ColumnDefinitions="120,*"
+                                                              ColumnSpacing="6"
+                                                              Margin="0,2">
+                                                            <TextBlock Text="{Binding DisplayKey}"
+                                                                       FontSize="10"
+                                                                       TextWrapping="Wrap"
+                                                                       VerticalAlignment="Center" />
+                                                            <TextBox Grid.Column="1"
+                                                                     Text="{Binding Text}"
+                                                                     TextWrapping="Wrap"
+                                                                     MinHeight="40"
+                                                                     FontSize="12"
+                                                                     KeyDown="OnLocresTextKeyDown"
+                                                                     LostFocus="OnLocresTextLostFocus" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <Border Classes="card"
+                                                Padding="12"
+                                                IsVisible="{Binding SelectedPatchItem.IsTexture}">
                                             <StackPanel Spacing="8">
                                                 <TextBlock Text="原始" FontSize="10" Opacity="0.6" />
                                                 <Image Source="{Binding SelectedPatchItem.OriginalPreview}"
@@ -408,7 +477,7 @@
                                                        MaxHeight="200" />
                                             </StackPanel>
                                         </Border>
-                                        <Border Classes="card" Padding="12">
+                                        <Border Classes="card" Padding="12" IsVisible="{Binding SelectedPatchItem.IsTexture}">
                                             <StackPanel Spacing="8">
                                                 <TextBlock Text="替换" FontSize="10" Opacity="0.6" />
                                                 <Image Source="{Binding SelectedPatchItem.ReplacementPreview}"
@@ -427,7 +496,8 @@
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <Button Content="选择替换图片"
                                                     Command="{Binding PickReplacementCommand}"
-                                                    Classes="accent" />
+                                                    Classes="accent"
+                                                    IsVisible="{Binding SelectedPatchItem.IsTexture}" />
                                             <Button Content="移除"
                                                     Command="{Binding RemovePatchItemCommand}"
                                                     Classes="ghost" />

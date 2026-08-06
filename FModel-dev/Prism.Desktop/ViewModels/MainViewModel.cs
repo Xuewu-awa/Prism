@@ -761,28 +761,66 @@ public partial class MainViewModel : ViewModelBase
                 originalFiles[pakPath] = localPath;
             }
 
-            // 3. 检查是否为纹理
-            TextureInspectionResult inspect = await new TextureReplacementService().InspectAsync(
-                inputUassetPath,
-                EngineVersion.VER_UE5_6,
-                NullIfWhiteSpace(UsmapPath));
-
-            // 4. 建 patch 项
-            var patch = new PatchItem(
-                kind: "texture",
-                sourcePath: item.FullPath,
-                name: baseName,
-                format: inspect.Format,
-                sizeLabel: $"{inspect.Width}×{inspect.Height}",
-                width: inspect.Width,
-                height: inspect.Height,
-                workDirectory: workDir,
-                inputUassetPath: inputUassetPath)
+            // 3. 本地化（locres）或纹理
+            PatchItem patch;
+            bool isLocres = originalPreview is { Kind: "locres" } || originalPreview?.Locres is not null;
+            if (isLocres)
             {
-                OriginalPreview = originalPreview is { Data: { Length: > 0 } previewData }
-                    ? DecodeImage(previewData, 640)
-                    : null,
-            };
+                LocresPreviewDto locres;
+                await _gate.WaitAsync();
+                try
+                {
+                    locres = await _session.ReadLocresPreviewAsync(item.FullPath);
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+
+                patch = new PatchItem(
+                    kind: "locres",
+                    sourcePath: item.FullPath,
+                    name: baseName,
+                    format: locres.Version,
+                    sizeLabel: $"{locres.EntryCount:N0} 条",
+                    width: 0,
+                    height: 0,
+                    workDirectory: workDir,
+                    inputUassetPath: string.Empty);
+                foreach (LocresEntryDto entry in locres.Entries)
+                {
+                    patch.LocresEntries.Add(new LocresEntryVM(entry));
+                }
+
+                patch.ApplyLocresFilter();
+                StatusText = $"已加入本地化：{baseName}（{locres.EntryCount:N0} 条）";
+            }
+            else
+            {
+                // 纹理：检查格式
+                TextureInspectionResult inspect = await new TextureReplacementService().InspectAsync(
+                    inputUassetPath,
+                    EngineVersion.VER_UE5_6,
+                    NullIfWhiteSpace(UsmapPath));
+
+                patch = new PatchItem(
+                    kind: "texture",
+                    sourcePath: item.FullPath,
+                    name: baseName,
+                    format: inspect.Format,
+                    sizeLabel: $"{inspect.Width}×{inspect.Height}",
+                    width: inspect.Width,
+                    height: inspect.Height,
+                    workDirectory: workDir,
+                    inputUassetPath: inputUassetPath)
+                {
+                    OriginalPreview = originalPreview is { Data: { Length: > 0 } previewData }
+                        ? DecodeImage(previewData, 640)
+                        : null,
+                };
+                StatusText = $"已加入替换：{baseName}（{inspect.Format}）";
+            }
+
             foreach ((string pakPath, string localPath) in originalFiles)
             {
                 patch.OriginalFiles[pakPath] = localPath;
@@ -790,7 +828,6 @@ public partial class MainViewModel : ViewModelBase
 
             PatchItems.Add(patch);
             SelectedPatchItem = patch;
-            StatusText = $"已加入替换：{baseName}（{inspect.Format}）";
             CurrentTabIndex = 2;
             NotifyPatchItemsState();
         });
@@ -900,6 +937,43 @@ public partial class MainViewModel : ViewModelBase
         TryDeleteDirectory(patch.WorkDirectory);
         StatusText = $"已移除替换项：{patch.Name}";
         NotifyPatchItemsState();
+    }
+
+    /// <summary>本地化条目修改后写回（失焦/回车触发），写出的 patched.locres 供构建补丁 Pak。</summary>
+    [RelayCommand]
+    private async Task UpdateLocresEntryAsync(PatchItem? patch)
+    {
+        if (patch is null || !patch.IsLocres || patch.OriginalFiles.Count == 0)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            string originalPath = patch.OriginalFiles
+                .OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(p => p.Value)
+                .First();
+            string outputDir = Path.Combine(patch.WorkDirectory, "output");
+            Directory.CreateDirectory(outputDir);
+            string outputPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(originalPath) + ".patched.locres");
+
+            byte[] originalBytes = await File.ReadAllBytesAsync(originalPath);
+            byte[] patchedBytes = LocresResourceCodec.ApplyTranslations(
+                originalBytes,
+                patch.LocresEntries.Select(e => e.ToDto()).ToList());
+            await File.WriteAllBytesAsync(outputPath, patchedBytes);
+
+            patch.PatchedFiles.Clear();
+            foreach ((string pakPath, string localPath) in patch.OriginalFiles)
+            {
+                patch.PatchedFiles[pakPath] = localPath;
+            }
+
+            patch.PatchedFiles[patch.SourcePath] = outputPath;
+            patch.Status = "已编辑";
+            StatusText = $"本地化已更新：{patch.Name}（{patch.LocresEntries.Count:N0} 条），可构建补丁 Pak。";
+        });
     }
 
     [RelayCommand(CanExecute = nameof(CanBuildPatchPak))]

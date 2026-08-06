@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Prism.Desktop.ViewModels;
 
 namespace Prism.Desktop.Views;
@@ -24,6 +25,25 @@ public partial class WorkspaceView : UserControl
         if (e.Key == Key.Enter && DataContext is MainViewModel vm)
         {
             vm.SearchCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>本地化文本失焦写回。</summary>
+    private void OnLocresTextLostFocus(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && vm.SelectedPatchItem is { IsLocres: true } patch)
+        {
+            vm.UpdateLocresEntryCommand.Execute(patch);
+        }
+    }
+
+    /// <summary>本地化文本回车写回。</summary>
+    private void OnLocresTextKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && DataContext is MainViewModel vm && vm.SelectedPatchItem is { IsLocres: true } patch)
+        {
+            vm.UpdateLocresEntryCommand.Execute(patch);
             e.Handled = true;
         }
     }
