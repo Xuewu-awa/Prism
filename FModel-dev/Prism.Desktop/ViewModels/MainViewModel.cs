@@ -1005,11 +1005,15 @@ public partial class MainViewModel : ViewModelBase
         {
             MergeInspectionResponse inspection = await InspectMergeCoreAsync();
             MergeStatus = $"主 Pak {inspection.BaseCount:N0} 项，合并 Pak {inspection.MergeCount:N0} 项，冲突 {inspection.ConflictCount:N0} 项";
-            // 桌面端弹确认框；Android 无窗口弹窗（TopLevel 不是 Window），直接继续，
-            // 冲突数已在状态栏展示，行为与"确认替换"一致
-            if (!OperatingSystem.IsAndroid() && inspection.ConflictCount > 0 && TopLevel is Window owner)
+            if (inspection.ConflictCount > 0)
             {
-                bool confirmed = await Views.ConfirmDialog.ShowAsync(owner, $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？");
+                bool confirmed = OperatingSystem.IsAndroid()
+                    ? (NativeConfirmAsync is not null
+                        ? await NativeConfirmAsync("确认", $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？")
+                        : true)
+                    : await Views.ConfirmDialog.ShowAsync(
+                        TopLevel as Window ?? throw new InvalidOperationException("窗口未就绪"),
+                        $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？");
                 if (!confirmed)
                 {
                     MergeStatus = "已取消";
@@ -1241,6 +1245,9 @@ public partial class MainViewModel : ViewModelBase
     }
 
     private IStorageFile? _mergeOutputTarget;
+
+    /// <summary>平台确认对话框委托：Android 壳注入原生 AlertDialog；桌面直接用 Window 弹窗。</summary>
+    public Func<string, string, Task<bool>>? NativeConfirmAsync { get; set; }
 
     // ============ 文件选择 ============
 
