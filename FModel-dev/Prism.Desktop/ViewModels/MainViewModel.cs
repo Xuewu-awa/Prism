@@ -119,6 +119,15 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsPatchTab));
     }
 
+    [RelayCommand]
+    private void SwitchConfigTab() => CurrentTabIndex = 0;
+
+    [RelayCommand]
+    private void SwitchBrowseTab() => CurrentTabIndex = 1;
+
+    [RelayCommand]
+    private void SwitchPatchTab() => CurrentTabIndex = 2;
+
     // ============ 打开配置 ============
 
     [ObservableProperty]
