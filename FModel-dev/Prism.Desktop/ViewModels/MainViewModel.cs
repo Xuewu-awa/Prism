@@ -329,6 +329,27 @@ public partial class MainViewModel : ViewModelBase
         SaveSettings();
     }
 
+    /// <summary>
+    /// Android 返回键：按页面层级返回。返回 false 表示已在主页，允许退出应用。
+    /// 浏览页在子目录时先返回上级目录。
+    /// </summary>
+    public bool HandleBack()
+    {
+        if (CurrentView != "Home")
+        {
+            if (CurrentView == "Workspace" && IsBrowseTab && !string.IsNullOrEmpty(CurrentFolder))
+            {
+                _ = UpCommand.ExecuteAsync(null);
+                return true;
+            }
+
+            CurrentView = "Home";
+            return true;
+        }
+
+        return false;
+    }
+
     private void SaveSettings()
     {
         if (!_loaded)

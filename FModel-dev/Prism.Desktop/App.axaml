@@ -9,25 +9,40 @@
     </Application.DataTemplates>
 
     <Application.Resources>
-        <!-- 主题色 -->
-        <SolidColorBrush x:Key="PrimaryBrush" Color="#0d9488" />
-        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#0b7f75" />
-        <SolidColorBrush x:Key="PrimaryLightBrush" Color="#3cb8a8" />
-        <SolidColorBrush x:Key="PrimaryWashBrush" Color="#0d94881f" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#f5f3ee" />
-        <SolidColorBrush x:Key="CardBrush" Color="#ffffff" />
-        <SolidColorBrush x:Key="DividerBrush" Color="#e8e6e0" />
-        <SolidColorBrush x:Key="TextMutedBrush" Color="#8a8982" />
-        <SolidColorBrush x:Key="DangerBrush" Color="#b43a2a" />
+        <ResourceDictionary>
+            <!-- 主题相关色（Light/Dark 两套） -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="PrimaryWashBrush" Color="#0d94881f" />
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#f5f3ee" />
+                    <SolidColorBrush x:Key="CardBrush" Color="#ffffff" />
+                    <SolidColorBrush x:Key="DividerBrush" Color="#e8e6e0" />
+                    <SolidColorBrush x:Key="TextMutedBrush" Color="#8a8982" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="PrimaryWashBrush" Color="#0d948833" />
+                    <SolidColorBrush x:Key="SurfaceBrush" Color="#1b1b1d" />
+                    <SolidColorBrush x:Key="CardBrush" Color="#262629" />
+                    <SolidColorBrush x:Key="DividerBrush" Color="#3a3a3d" />
+                    <SolidColorBrush x:Key="TextMutedBrush" Color="#9a9a9e" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
 
-        <!-- 主题强调色（Fluent 控件拾取 SystemAccentColor） -->
-        <Color x:Key="SystemAccentColor">#0d9488</Color>
-        <Color x:Key="SystemAccentColorDark1">#0b7f75</Color>
-        <Color x:Key="SystemAccentColorDark2">#096b63</Color>
-        <Color x:Key="SystemAccentColorDark3">#075751</Color>
-        <Color x:Key="SystemAccentColorLight1">#3cb8a8</Color>
-        <Color x:Key="SystemAccentColorLight2">#6bcfc3</Color>
-        <Color x:Key="SystemAccentColorLight3">#9ae0d8</Color>
+            <!-- 主题无关色 -->
+            <SolidColorBrush x:Key="PrimaryBrush" Color="#0d9488" />
+            <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#0b7f75" />
+            <SolidColorBrush x:Key="PrimaryLightBrush" Color="#3cb8a8" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#b43a2a" />
+
+            <!-- 主题强调色（Fluent 控件拾取 SystemAccentColor） -->
+            <Color x:Key="SystemAccentColor">#0d9488</Color>
+            <Color x:Key="SystemAccentColorDark1">#0b7f75</Color>
+            <Color x:Key="SystemAccentColorDark2">#096b63</Color>
+            <Color x:Key="SystemAccentColorDark3">#075751</Color>
+            <Color x:Key="SystemAccentColorLight1">#3cb8a8</Color>
+            <Color x:Key="SystemAccentColorLight2">#6bcfc3</Color>
+            <Color x:Key="SystemAccentColorLight3">#9ae0d8</Color>
+        </ResourceDictionary>
     </Application.Resources>
 
     <Application.Styles>

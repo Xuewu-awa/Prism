@@ -15,6 +15,14 @@ public partial class MainView : UserControl
     public MainView()
     {
         InitializeComponent();
+        // 桌面由 MainWindow.Opened 注入 TopLevel；Android（MainView 生命周期）在此注入
+        Loaded += (_, _) =>
+        {
+            if (DataContext is MainViewModel vm)
+            {
+                vm.TopLevel ??= TopLevel.GetTopLevel(this);
+            }
+        };
         SizeChanged += (_, e) =>
         {
             if (DataContext is MainViewModel vm)

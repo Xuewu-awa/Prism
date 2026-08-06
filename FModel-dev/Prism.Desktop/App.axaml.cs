@@ -8,6 +8,9 @@ namespace Prism.Desktop;
 
 public partial class App : Application
 {
+    /// <summary>供平台壳（Android MainActivity）访问返回键处理。</summary>
+    public MainViewModel? MainVm { get; private set; }
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -16,6 +19,7 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         var vm = new MainViewModel();
+        MainVm = vm;
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow
