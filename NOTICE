@@ -1,0 +1,9 @@
+﻿Prism（桌面版 & 安卓版）
+========================
+本软件基于 kardswalker/Prism（https://github.com/kardswalker/Prism）二次开发，
+上游以 GNU GPL v3.0 许可发布。本软件以相同的 GPL-3.0 许可分发，
+许可证全文见本目录 LICENSE 文件。
+
+Derived from kardswalker/Prism (https://github.com/kardswalker/Prism),
+which is licensed under the GNU GPL v3.0. This software is distributed
+under the GPL-3.0 license; see the LICENSE file in this directory.
