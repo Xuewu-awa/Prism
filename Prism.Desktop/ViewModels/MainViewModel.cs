@@ -426,6 +426,7 @@ public partial class MainViewModel : ViewModelBase
             }
 
             StatusText = $"已打开 {Path.GetFileName(PakPath)}：{result.FileCount:N0} 个文件。";
+            AddLog($"打开 Pak：{Path.GetFileName(PakPath)}（{result.FileCount:N0} 个文件）");
             CurrentTabIndex = 1;
             await NavigateToAsync(string.Empty);
         });
@@ -489,6 +490,7 @@ public partial class MainViewModel : ViewModelBase
             Entries = new ObservableCollection<EntryItem>(results.Select(EntryItem.Create));
             CurrentPathText = $"搜索：{SearchQuery.Trim()}";
             StatusText = $"搜索命中 {results.Count:N0} 项。";
+            AddLog($"搜索“{SearchQuery.Trim()}”命中 {results.Count:N0} 项");
             ClearPreview();
             StartThumbnails();
         });
@@ -746,13 +748,6 @@ public partial class MainViewModel : ViewModelBase
             Directory.CreateDirectory(inputDir);
 
             string baseName = Path.GetFileNameWithoutExtension(item.FullPath);
-            string? uassetPakPath = rawFiles.Keys.FirstOrDefault(k => k.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase));
-            if (uassetPakPath is null)
-            {
-                throw new InvalidOperationException("该资源不是 .uasset 资产。");
-            }
-
-            string inputUassetPath = Path.Combine(inputDir, baseName + ".uasset");
             Dictionary<string, string> originalFiles = new(StringComparer.OrdinalIgnoreCase);
             foreach ((string pakPath, byte[] data) in rawFiles)
             {
@@ -761,28 +756,75 @@ public partial class MainViewModel : ViewModelBase
                 originalFiles[pakPath] = localPath;
             }
 
-            // 3. 检查是否为纹理
-            TextureInspectionResult inspect = await new TextureReplacementService().InspectAsync(
-                inputUassetPath,
-                EngineVersion.VER_UE5_6,
-                NullIfWhiteSpace(UsmapPath));
-
-            // 4. 建 patch 项
-            var patch = new PatchItem(
-                kind: "texture",
-                sourcePath: item.FullPath,
-                name: baseName,
-                format: inspect.Format,
-                sizeLabel: $"{inspect.Width}×{inspect.Height}",
-                width: inspect.Width,
-                height: inspect.Height,
-                workDirectory: workDir,
-                inputUassetPath: inputUassetPath)
+            // 3. 本地化（locres）或纹理
+            PatchItem patch;
+            bool isLocres = originalPreview is { Kind: "locres" } || originalPreview?.Locres is not null;
+            if (isLocres)
             {
-                OriginalPreview = originalPreview is { Data: { Length: > 0 } previewData }
-                    ? DecodeImage(previewData, 640)
-                    : null,
-            };
+                LocresPreviewDto locres;
+                await _gate.WaitAsync();
+                try
+                {
+                    locres = await _session.ReadLocresPreviewAsync(item.FullPath);
+                }
+                finally
+                {
+                    _gate.Release();
+                }
+
+                patch = new PatchItem(
+                    kind: "locres",
+                    sourcePath: item.FullPath,
+                    name: baseName,
+                    format: locres.Version,
+                    sizeLabel: $"{locres.EntryCount:N0} 条",
+                    width: 0,
+                    height: 0,
+                    workDirectory: workDir,
+                    inputUassetPath: string.Empty);
+                foreach (LocresEntryDto entry in locres.Entries)
+                {
+                    patch.LocresEntries.Add(new LocresEntryVM(entry));
+                }
+
+                patch.ApplyLocresFilter();
+                StatusText = $"已加入本地化：{baseName}（{locres.EntryCount:N0} 条）";
+            }
+            else
+            {
+                // 纹理：需要 .uasset 关联文件
+                string? uassetPakPath = rawFiles.Keys.FirstOrDefault(k => k.EndsWith(".uasset", StringComparison.OrdinalIgnoreCase));
+                if (uassetPakPath is null)
+                {
+                    throw new InvalidOperationException("该资源不是 .uasset 资产。");
+                }
+
+                string inputUassetPath = Path.Combine(inputDir, baseName + ".uasset");
+
+                // 检查纹理格式
+                TextureInspectionResult inspect = await new TextureReplacementService().InspectAsync(
+                    inputUassetPath,
+                    EngineVersion.VER_UE5_6,
+                    NullIfWhiteSpace(UsmapPath));
+
+                patch = new PatchItem(
+                    kind: "texture",
+                    sourcePath: item.FullPath,
+                    name: baseName,
+                    format: inspect.Format,
+                    sizeLabel: $"{inspect.Width}×{inspect.Height}",
+                    width: inspect.Width,
+                    height: inspect.Height,
+                    workDirectory: workDir,
+                    inputUassetPath: inputUassetPath)
+                {
+                    OriginalPreview = originalPreview is { Data: { Length: > 0 } previewData }
+                        ? DecodeImage(previewData, 640)
+                        : null,
+                };
+                StatusText = $"已加入替换：{baseName}（{inspect.Format}）";
+            }
+
             foreach ((string pakPath, string localPath) in originalFiles)
             {
                 patch.OriginalFiles[pakPath] = localPath;
@@ -790,7 +832,6 @@ public partial class MainViewModel : ViewModelBase
 
             PatchItems.Add(patch);
             SelectedPatchItem = patch;
-            StatusText = $"已加入替换：{baseName}（{inspect.Format}）";
             CurrentTabIndex = 2;
             NotifyPatchItemsState();
         });
@@ -902,6 +943,43 @@ public partial class MainViewModel : ViewModelBase
         NotifyPatchItemsState();
     }
 
+    /// <summary>本地化条目修改后写回（失焦/回车触发），写出的 patched.locres 供构建补丁 Pak。</summary>
+    [RelayCommand]
+    private async Task UpdateLocresEntryAsync(PatchItem? patch)
+    {
+        if (patch is null || !patch.IsLocres || patch.OriginalFiles.Count == 0)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            string originalPath = patch.OriginalFiles
+                .OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(p => p.Value)
+                .First();
+            string outputDir = Path.Combine(patch.WorkDirectory, "output");
+            Directory.CreateDirectory(outputDir);
+            string outputPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(originalPath) + ".patched.locres");
+
+            byte[] originalBytes = await File.ReadAllBytesAsync(originalPath);
+            byte[] patchedBytes = LocresResourceCodec.ApplyTranslations(
+                originalBytes,
+                patch.LocresEntries.Select(e => e.ToDto()).ToList());
+            await File.WriteAllBytesAsync(outputPath, patchedBytes);
+
+            patch.PatchedFiles.Clear();
+            foreach ((string pakPath, string localPath) in patch.OriginalFiles)
+            {
+                patch.PatchedFiles[pakPath] = localPath;
+            }
+
+            patch.PatchedFiles[patch.SourcePath] = outputPath;
+            patch.Status = "已编辑";
+            StatusText = $"本地化已更新：{patch.Name}（{patch.LocresEntries.Count:N0} 条），可构建补丁 Pak。";
+        });
+    }
+
     [RelayCommand(CanExecute = nameof(CanBuildPatchPak))]
     private async Task BuildPatchPakAsync()
     {
@@ -980,6 +1058,7 @@ public partial class MainViewModel : ViewModelBase
                     Compression: PakCompression.Oodle)));
 
                 StatusText = $"补丁 Pak 已构建：{Path.GetFileName(outputPath)}（{files.Count} 个文件）";
+            AddLog($"构建补丁 Pak：{Path.GetFileName(outputPath)}（{files.Count} 个文件）");
             }
         });
     }
@@ -1007,9 +1086,13 @@ public partial class MainViewModel : ViewModelBase
             MergeStatus = $"主 Pak {inspection.BaseCount:N0} 项，合并 Pak {inspection.MergeCount:N0} 项，冲突 {inspection.ConflictCount:N0} 项";
             if (inspection.ConflictCount > 0)
             {
-                bool confirmed = await Views.ConfirmDialog.ShowAsync(
-                    TopLevel as Window ?? throw new InvalidOperationException("窗口未就绪"),
-                    $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？");
+                bool confirmed = OperatingSystem.IsAndroid()
+                    ? (NativeConfirmAsync is not null
+                        ? await NativeConfirmAsync("确认", $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？")
+                        : true)
+                    : await Views.ConfirmDialog.ShowAsync(
+                        TopLevel as Window ?? throw new InvalidOperationException("窗口未就绪"),
+                        $"发现 {inspection.ConflictCount} 个冲突。用合并 Pak 的文件替换？");
                 if (!confirmed)
                 {
                     MergeStatus = "已取消";
@@ -1135,6 +1218,9 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     public partial string TempDirectory { get; set; }
 
+    [ObservableProperty]
+    public partial string LogText { get; set; } = "暂无日志";
+
     // ============ 列表缩略图（默认关闭，设置中开启） ============
 
     [ObservableProperty]
@@ -1238,9 +1324,62 @@ public partial class MainViewModel : ViewModelBase
         AstcencStatus = runner?.HasAstcenc == true ? "已找到 astcenc" : "未找到 astcenc";
         TexconvStatus = runner?.HasTexconv == true ? "已找到 texconv" : "未找到 texconv";
         TempDirectory = Path.GetTempPath();
+        RefreshLog();
+        Services.AppLog.Add($"应用启动 v{VersionText}");
+    }
+
+    /// <summary>刷新日志预览文本（设置页展示）。</summary>
+    private void RefreshLog() => LogText = Services.AppLog.FullText;
+
+    /// <summary>记录一条日志并刷新预览。</summary>
+    private void AddLog(string line)
+    {
+        Services.AppLog.Add(line);
+        RefreshLog();
+    }
+
+    /// <summary>导出日志：桌面写文件，Android 走 SAF 保存流。</summary>
+    [RelayCommand]
+    private async Task ExportLogAsync()
+    {
+        TopLevel? top = TopLevel;
+        if (top is null)
+        {
+            return;
+        }
+
+        IStorageFile? file = await top.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出日志",
+            SuggestedFileName = $"prism-log-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+            FileTypeChoices = [new FilePickerFileType("文本") { Patterns = ["*.txt"] }],
+        });
+        if (file is null)
+        {
+            return;
+        }
+
+        RefreshLog();
+        byte[] content = System.Text.Encoding.UTF8.GetBytes(LogText);
+        if (OperatingSystem.IsAndroid())
+        {
+            await using Stream dst = await file.OpenWriteAsync();
+            await dst.WriteAsync(content);
+            AddLog($"日志已导出：{file.Name}");
+        }
+        else if (file.TryGetLocalPath() is { } path)
+        {
+            await File.WriteAllBytesAsync(path, content);
+            AddLog($"日志已导出：{path}");
+        }
+
+        StatusText = $"日志已导出（{Services.AppLog.Count:N0} 行）。";
     }
 
     private IStorageFile? _mergeOutputTarget;
+
+    /// <summary>平台确认对话框委托：Android 壳注入原生 AlertDialog；桌面直接用 Window 弹窗。</summary>
+    public Func<string, string, Task<bool>>? NativeConfirmAsync { get; set; }
 
     // ============ 文件选择 ============
 
@@ -1379,6 +1518,7 @@ public partial class MainViewModel : ViewModelBase
         catch (Exception ex)
         {
             StatusText = $"错误：{ex.Message}";
+            AddLog($"错误：{ex.Message}");
         }
         finally
         {
