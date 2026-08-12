@@ -1,24 +1,45 @@
-# Unreal Engine Blueprint Ripper
+# Prism 工作区
 
-ASP.NET-based WebUI for inspecting and editing Unreal Engine blueprint bytecode in `.uasset` files with UAssetAPI.
+UE `.pak` 资产管理工具生态：**Android + Windows 桌面**双端，基于 [CUE4Parse](https://github.com/FabianFG/CUE4Parse)，在 [kardswalker/Prism](https://github.com/kardswalker/Prism) 基础上扩展。
 
-## Current capabilities
+## 目录
 
-- Upload `.uasset`, optional `.uexp`, and optional `.usmap` files.
-- Parse `StructExport.ScriptBytecode` into a node graph view.
-- Extract semantic templates from `EX_Context` function calls into a local JSON node library.
-- Edit visible node metadata, scalar literal values, node positions, and simple node connections.
-- Apply graph changes back to the in-memory asset and save with a `.bak` backup.
-- Preserve unsupported existing expressions where possible, while warning when newly added nodes cannot be compiled yet.
-
-## Run
-
-```powershell
-dotnet run --project UEBPR
+```
+FModel-dev/                      Prism 主工程（独立解决方案）
+  ├── Prism/                     Android WebView 版（上游原样）
+  ├── Prism.PC/                  本地 Web UI 版
+  ├── Prism.Desktop/             Avalonia 共享 UI/逻辑（库，net10.0）
+  ├── Prism.Desktop.Desktop/     Windows 壳（单文件发布）
+  ├── Prism.Desktop.Android/     Android 壳（APK，arm64-v8a）
+  ├── PakTool.Core/              Pak 会话/预览/导出/合并（LocresResourceCodec）
+  ├── UAssetTexture.Core/        纹理替换引擎
+  ├── UAssetCLI/                 纹理替换 CLI
+  └── third_party/               Android native 库（prism_codecs/repak_bind）
+UAssetTextureWeb/                纹理替换 Web 应用（tools/ 编码器目录）
+UAssetCLI/                       纹理替换 CLI（独立副本，供桌面版运行）
+UAssetAPI-master/                UAssetAPI（vendored，含本地修改）
+UE-Pak-Manager/                  WPF Pak 管理器
+rel/                             发行版输出（win/、android/）
 ```
 
-Then open the URL printed by ASP.NET, usually `http://localhost:5000` or the configured launch URL.
+## 快速开始
 
-## Notes
+```sh
+# Windows 桌面（Debug）
+dotnet build FModel-dev/Prism.Desktop.Desktop/Prism.Desktop.Desktop.csproj
 
-This is an early editor surface over low-level Kismet bytecode. It is intentionally conservative: complex blueprint constructs are displayed and preserved first, then progressively upgraded into fully editable node templates as the node library learns more context.
+# Windows 单文件发布
+dotnet publish FModel-dev/Prism.Desktop.Desktop/Prism.Desktop.Desktop.csproj \
+  -c Release -r win-x64 --self-contained \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+# Android Release APK（需 JDK + Android SDK）
+dotnet build FModel-dev/Prism.Desktop.Android/Prism.Desktop.Android.csproj \
+  -c Release -p:JavaSdkDirectory=<JDK路径>
+```
+
+说明：`FModel-dev/external/CUE4Parse` 是 git submodule；桌面纹理替换需要 `UAssetCLI`（先 `dotnet build UAssetCLI -c Release`）与 `UAssetTextureWeb/tools/` 下的 astcenc/texconv。
+
+## 许可
+
+GPL-3.0（继承上游 kardswalker/Prism）。详见 `LICENSE` 与 `NOTICE`。
