@@ -1,107 +1,72 @@
 # Prism
 
-Prism is an Android Unreal Engine `.pak` browser and extractor built on top of CUE4Parse.
+UE `.pak` 资产管理工具：**Android + Windows 桌面**双端，基于 [CUE4Parse](https://github.com/FabianFG/CUE4Parse)。
 
-It is designed for quick on-device inspection of UE4/UE5 package archives: open a pak, browse it like a file manager, preview supported texture assets, and export raw package files or PNG images.
+在 [kardswalker/Prism](https://github.com/kardswalker/Prism)（Android WebView 版）的基础上扩展而来。
 
-## Features
+## 功能
 
-- Android-first WebView UI with portrait and landscape layouts.
-- UE `.pak` mounting through CUE4Parse.
-- Known AES key support for encrypted paks.
-- Optional `.usmap` import for unversioned UE asset properties.
-- File-manager style package browsing and search.
-- Groups related `.uasset`, `.uexp`, and `.ubulk` files as one visible asset.
-- Raw export of grouped package files.
-- PNG export for supported `UTexture` assets.
-- Image preview with pan and zoom.
-- In-app diagnostics panel for decoding and native library troubleshooting.
-- Optional Android Oodle native loading for Oodle-compressed paks.
+- **Pak 浏览 / 搜索 / 导出**（raw、PNG、typed：纹理/模型/音频）
+- **预览**：纹理（PNG）、音频（WAV 播放）、模型（几何信息）、本地化
+- **纹理替换**：ASTC/BC7/DXT
+  - 桌面：进程外 `UAssetCLI` + `astcenc`/`texconv`
+  - Android：进程内 `prism_codecs.so`（native）
+- **本地化（locres）编辑**：过滤/搜索条目，修改写回，构建补丁 Pak
+  - 桌面：ListBox 虚拟化渲染
+  - Android：分页渲染（每页 100 条）
+- **Pak 合并**：冲突检测 + 询问（桌面弹窗 / Android 原生 AlertDialog），Oodle 可选
+- **补丁 Pak 构建**（`repak_bind` 打包）
+- **缩略图**（设置中开启）、**日志查看/导出**、**设置持久化**、**深浅色主题**
+- **响应式布局**：桌面横屏左列右详情 / 竖屏底部抽屉；Android 触屏手势
+- AES 密钥、`.usmap` 映射支持
 
-## Current Scope
+## 平台
 
-Prism currently focuses on `.pak` archives. `.utoc` and `.ucas` containers are not implemented yet.
+| 平台 | 入口 | 技术 |
+|---|---|---|
+| Windows | `Prism.Desktop.Desktop` | Avalonia 12 / .NET 10（单文件发布） |
+| Android | `Prism.Desktop.Android` | Avalonia 12 / .NET 10（APK，arm64-v8a） |
 
-Mapping files are not bundled by default. Use the **Mapping** picker inside the app to import a matching `.usmap` when a game uses unversioned properties.
+## 项目结构
 
-## Oodle Support
-
-Oodle is optional and is not committed to this repository.
-
-If you have a legally usable Android Oodle build, place it here before building:
-
-```text
-third_party/lib/arm64-v8a/liboodle-data-shared.so
+```
+Prism.Desktop          共享 Avalonia UI / 逻辑（库）
+Prism.Desktop.Desktop  Windows 壳（入口、发布）
+Prism.Desktop.Android  Android 壳（MainActivity、原生对话框、native 库打包）
+PakTool.Core           Pak 会话、预览、导出、合并、LocresResourceCodec
+UAssetTexture.Core     纹理替换引擎（inspect/replace）
+UAssetCLI              纹理替换 CLI（inspect-texture / replace-texture）
+Prism                  Android WebView 版（上游原样保留）
+tools/                 astcenc / texconv 编码器（运行依赖）
 ```
 
-The library must be an Android `arm64-v8a` shared object exporting:
+## 构建
 
-```text
-OodleLZ_Decompress
-OodleLZ_Compress
-OodleLZ_GetCompressedBufferSizeNeeded
+前置：.NET 10 SDK；Android 需要 JDK 与 Android SDK。
+
+```sh
+# 初始化 submodule
+git submodule update --init
+
+# 纹理替换 CLI（Windows 桌面运行时依赖）
+dotnet build UAssetCLI/UAssetCLI.csproj -c Release
+
+# Windows 单文件发布
+dotnet publish Prism.Desktop.Desktop/Prism.Desktop.Desktop.csproj \
+  -c Release -r win-x64 --self-contained \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+# Android Release APK
+dotnet build Prism.Desktop.Android/Prism.Desktop.Android.csproj \
+  -c Release -p:JavaSdkDirectory=<JDK路径>
 ```
 
-It should depend only on Android system libraries such as `libc.so`, `libm.so`, `libdl.so`, and `liblog.so`. Linux/glibc builds that depend on `libc.so.6`, `libstdc++.so.6`, or `ld-linux-aarch64.so.1` will not load on Android.
+说明：
 
-If no Oodle library is present, Prism still builds and works for uncompressed/zlib-compatible paks, but Oodle-compressed entries cannot be decoded.
+- `external/CUE4Parse` 是 git submodule，锁定到 `ecc48789`。
+- `tools/` 下的 `astcenc`/`texconv` 不在仓库中，需要自行放入（纹理替换运行时依赖）。
+- Oodle 二进制按 EULA 不提交：Android 打包需要时自行构建 `liboodle-data-shared.so` 放入 `third_party/lib/arm64-v8a/`。
 
-### Oodle / Unreal EULA Notice
+## 许可
 
-Prism does not claim ownership of Oodle, Unreal Engine code, game assets, mapping files, AES keys, or any native build artifact derived from Epic Games, RAD Game Tools, or a third-party game project.
-
-If you provide an Oodle native library for local builds, you are responsible for making sure your use and distribution of that library complies with the Unreal Engine EULA, RAD/Epic licensing terms, and any applicable game or platform agreements. This repository is intended to make Prism easier to build and test; it is not a grant of rights to redistribute proprietary middleware or game content.
-
-If Epic Games, RAD Game Tools, or another rights holder believes any Prism documentation or build integration should be changed, please contact the project maintainer so the repository can be adjusted or the affected material can be removed.
-
-## Clone
-
-Prism uses CUE4Parse as a Git submodule. Clone with submodules enabled:
-
-```powershell
-git clone --recurse-submodules https://github.com/kardswalker/Prism.git
-```
-
-If you already cloned the repository without submodules, run:
-
-```powershell
-git submodule update --init --recursive
-```
-
-## Build
-
-Install the .NET Android workload and Android SDK/NDK, then build:
-
-```powershell
-dotnet workload restore
-dotnet build Prism\Prism.csproj
-```
-
-Release APK:
-
-```powershell
-dotnet publish Prism\Prism.csproj -c Release -f net10.0-android -p:AndroidPackageFormat=apk
-```
-
-Debug install example:
-
-```powershell
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install --no-incremental -r "Prism\bin\Debug\net10.0-android\com.ccbteam.prism-Signed.apk"
-```
-
-## Repository Layout
-
-- `Prism` - Android app and WebView UI.
-- `PakTool.Core` - Pak mounting, browsing, export, and texture preview logic.
-- `PakTool.Cli` - Desktop diagnostic harness for quick parser checks.
-- `external/CUE4Parse` - Unreal archive and asset parser dependency, referenced as a Git submodule.
-
-## Notes
-
-Use Prism only with archives and keys you are authorized to access. Prism does not include game content, AES keys, mapping files, or proprietary Oodle redistributables.
-
-## License
-
-Prism application code is released under the MIT License. See `LICENSE`.
-
-Bundled third-party source and dependencies keep their own licenses. In particular, CUE4Parse is licensed under Apache License 2.0; see `external/CUE4Parse/LICENSE`, `external/CUE4Parse/NOTICE`, and this repository's `NOTICE`.
+GPL-3.0（继承上游 kardswalker/Prism）。详见 `LICENSE` 与 `NOTICE`。
